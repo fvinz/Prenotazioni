@@ -47,5 +47,5 @@ supabase db push
 ## Widget pubblico
 
 Ogni salone ha la sua pagina di prenotazione su `/{tenantSlug}`
-(servizio → operatore → giorno → orario → dati cliente), con la brand
+(servizio → operatore → giorno e orario → dati cliente), con la brand
 identity "Appunto".

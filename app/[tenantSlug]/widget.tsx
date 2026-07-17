@@ -1,7 +1,7 @@
 'use client';
 
-// Widget di prenotazione (client). Flusso in 5 passi:
-// servizio -> operatore (saltato se unico) -> giorno -> orario -> dati.
+// Widget di prenotazione (client). Flusso in 4 passi:
+// servizio -> operatore (saltato se unico) -> giorno+orario -> dati.
 // Gli slot arrivano da /api/slots, la conferma passa da /api/bookings.
 // La voce del brand: frasi brevi, dirette, zero gergo tecnico.
 
@@ -21,7 +21,7 @@ export interface DatiSalone {
   weekdayPerOperatore: Record<string, number[]>;
 }
 
-type Passo = 'servizio' | 'operatore' | 'giorno' | 'orario' | 'dati' | 'fatto';
+type Passo = 'servizio' | 'operatore' | 'quando' | 'dati' | 'fatto';
 
 interface Stato {
   passo: Passo;
@@ -45,28 +45,27 @@ function riduci(stato: Stato, azione: Azione): Stato {
     case 'scegliServizio':
       // Un solo operatore per questo servizio: passo saltato.
       return azione.operatoreUnicoId
-        ? { passo: 'giorno', servizioId: azione.servizioId, operatoreId: azione.operatoreUnicoId }
+        ? { passo: 'quando', servizioId: azione.servizioId, operatoreId: azione.operatoreUnicoId }
         : { passo: 'operatore', servizioId: azione.servizioId };
     case 'scegliOperatore':
-      return { ...stato, passo: 'giorno', operatoreId: azione.operatoreId };
+      return { ...stato, passo: 'quando', operatoreId: azione.operatoreId };
     case 'scegliGiorno':
-      return { ...stato, passo: 'orario', giorno: azione.giorno, slot: undefined };
+      // Stesso passo: gli orari compaiono sotto la striscia dei giorni.
+      return { ...stato, giorno: azione.giorno, slot: undefined };
     case 'scegliSlot':
       return { ...stato, passo: 'dati', slot: azione.slot };
     case 'confermato':
       return { ...stato, passo: 'fatto' };
     case 'slotConteso':
-      return { ...stato, passo: 'orario', slot: undefined };
+      return { ...stato, passo: 'quando', slot: undefined };
     case 'indietro':
       switch (stato.passo) {
         case 'operatore':
           return { passo: 'servizio' };
-        case 'giorno':
+        case 'quando':
           return { passo: 'servizio' };
-        case 'orario':
-          return { ...stato, passo: 'giorno', giorno: undefined };
         case 'dati':
-          return { ...stato, passo: 'orario', slot: undefined };
+          return { ...stato, passo: 'quando', slot: undefined };
         default:
           return stato;
       }
@@ -103,7 +102,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
         <Riepilogo
           servizio={servizio?.name}
           operatore={operatore?.name}
-          giorno={stato.giorno?.etichetta}
+          giorno={stato.passo === 'dati' ? stato.giorno?.etichetta : undefined}
           orario={stato.slot?.label}
           onIndietro={() => dispatch({ tipo: 'indietro' })}
         />
@@ -150,25 +149,23 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
         </Sezione>
       )}
 
-      {stato.passo === 'giorno' && stato.operatoreId && (
-        <Sezione titolo="Quale giorno?">
+      {stato.passo === 'quando' && stato.servizioId && stato.operatoreId && (
+        <Sezione titolo="Quando?">
           <StrisciaGiorni
             horizonDays={dati.tenant.horizonDays}
             weekdayDisponibili={dati.weekdayPerOperatore[stato.operatoreId] ?? []}
+            selezionato={stato.giorno?.data}
             onScegli={(giorno) => dispatch({ tipo: 'scegliGiorno', giorno })}
           />
-        </Sezione>
-      )}
-
-      {stato.passo === 'orario' && stato.servizioId && stato.operatoreId && stato.giorno && (
-        <Sezione titolo="A che ora?">
-          <SceltaOrario
-            tenantSlug={dati.tenant.slug}
-            operatorId={stato.operatoreId}
-            serviceId={stato.servizioId}
-            data={stato.giorno.data}
-            onScegli={(slot) => dispatch({ tipo: 'scegliSlot', slot })}
-          />
+          {stato.giorno && (
+            <SceltaOrario
+              tenantSlug={dati.tenant.slug}
+              operatorId={stato.operatoreId}
+              serviceId={stato.servizioId}
+              data={stato.giorno.data}
+              onScegli={(slot) => dispatch({ tipo: 'scegliSlot', slot })}
+            />
+          )}
         </Sezione>
       )}
 
@@ -235,6 +232,7 @@ function Riepilogo(props: {
 function StrisciaGiorni(props: {
   horizonDays: number;
   weekdayDisponibili: number[];
+  selezionato?: string;
   onScegli: (g: GiornoPrenotabile) => void;
 }) {
   // 'now' è calcolato al mount, lato client: il fuso locale del telefono
@@ -258,7 +256,11 @@ function StrisciaGiorni(props: {
           key={g.data}
           disabled={!g.disponibile}
           onClick={() => props.onScegli(g)}
-          className="shrink-0 rounded-xl border border-sabbia bg-white/60 px-3 py-2 text-sm capitalize transition hover:border-terracotta disabled:opacity-30"
+          className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
+            props.selezionato === g.data
+              ? 'border-terracotta bg-terracotta font-medium text-crema'
+              : 'border-sabbia bg-white/60 hover:border-terracotta'
+          }`}
         >
           {g.etichetta}
         </button>
@@ -326,7 +328,7 @@ function SceltaOrario(props: {
     );
 
   return (
-    <div className="space-y-3">
+    <div className="mt-3 space-y-3">
       <Griglia titolo="Mattina" lista={mattina} />
       <Griglia titolo="Pomeriggio" lista={pomeriggio} />
     </div>
