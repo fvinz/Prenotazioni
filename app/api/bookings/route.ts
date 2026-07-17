@@ -11,7 +11,8 @@
 //     italiano (sono quelli sollevati da create_booking).
 //
 //  Body JSON: { tenantSlug, operatorId, serviceId, startsAt (ISO),
-//              nome, telefono, email?, website? }
+//              nome, cognome, prefisso? (es. '+39'), telefono,
+//              email?, website? }
 // =====================================================================
 
 import { NextResponse } from 'next/server';
@@ -26,9 +27,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Richiesta non valida' }, { status: 400 });
   }
 
-  const { tenantSlug, operatorId, serviceId, startsAt, nome, telefono, email, website } = body as {
-    [k: string]: string | undefined;
-  };
+  const { tenantSlug, operatorId, serviceId, startsAt, nome, cognome, prefisso, telefono, email, website } =
+    body as { [k: string]: string | undefined };
 
   // Honeypot compilato: quasi certamente un bot. Fingiamo che sia andata
   // bene, senza toccare il database.
@@ -36,14 +36,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  if (!tenantSlug || !operatorId || !serviceId || !startsAt || !nome?.trim() || !telefono) {
+  if (!tenantSlug || !operatorId || !serviceId || !startsAt || !nome?.trim() || !cognome?.trim() || !telefono?.trim()) {
     return NextResponse.json(
       { error: 'Compila tutti i campi obbligatori' },
       { status: 400 },
     );
   }
 
-  const telefonoE164 = normalizzaTelefonoE164(telefono);
+  // Il prefisso scelto nel widget (default +39) si applica solo se il
+  // numero non è già in formato internazionale.
+  const telefonoCompleto = telefono.trim().startsWith('+')
+    ? telefono
+    : `${prefisso ?? '+39'} ${telefono}`;
+  const telefonoE164 = normalizzaTelefonoE164(telefonoCompleto);
   if (!telefonoE164) {
     return NextResponse.json(
       { error: 'Il numero di telefono non sembra valido' },
@@ -56,7 +61,8 @@ export async function POST(request: Request) {
     p_tenant_slug: tenantSlug,
     p_operator_id: operatorId,
     p_service_id: serviceId,
-    p_customer_name: nome.trim(),
+    p_customer_first_name: nome.trim(),
+    p_customer_last_name: cognome.trim(),
     p_customer_phone: telefonoE164,
     p_customer_email: email?.trim() || null,
     p_starts_at: startsAt,

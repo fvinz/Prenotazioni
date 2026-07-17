@@ -335,6 +335,29 @@ function SceltaOrario(props: {
   );
 }
 
+// Prefissi internazionali proposti nel form (l'Italia è il default).
+const PREFISSI = [
+  { code: '+39', label: '🇮🇹 +39' },
+  { code: '+41', label: '🇨🇭 +41' },
+  { code: '+33', label: '🇫🇷 +33' },
+  { code: '+49', label: '🇩🇪 +49' },
+  { code: '+34', label: '🇪🇸 +34' },
+  { code: '+44', label: '🇬🇧 +44' },
+  { code: '+43', label: '🇦🇹 +43' },
+  { code: '+32', label: '🇧🇪 +32' },
+  { code: '+31', label: '🇳🇱 +31' },
+  { code: '+351', label: '🇵🇹 +351' },
+  { code: '+40', label: '🇷🇴 +40' },
+  { code: '+355', label: '🇦🇱 +355' },
+  { code: '+380', label: '🇺🇦 +380' },
+  { code: '+48', label: '🇵🇱 +48' },
+  { code: '+212', label: '🇲🇦 +212' },
+  { code: '+86', label: '🇨🇳 +86' },
+  { code: '+63', label: '🇵🇭 +63' },
+  { code: '+91', label: '🇮🇳 +91' },
+  { code: '+1', label: '🇺🇸 +1' },
+];
+
 function FormDati(props: {
   salone: string;
   tenantSlug: string;
@@ -362,6 +385,8 @@ function FormDati(props: {
           serviceId: props.serviceId,
           startsAt: props.slot.start,
           nome: form.get('nome'),
+          cognome: form.get('cognome'),
+          prefisso: form.get('prefisso'),
           telefono: form.get('telefono'),
           email: form.get('email'),
           website: form.get('website'), // honeypot
@@ -390,14 +415,31 @@ function FormDati(props: {
 
   return (
     <form onSubmit={invia} className="space-y-3">
-      <input name="nome" required placeholder="Nome e cognome" className={campo} />
-      <input
-        name="telefono"
-        required
-        type="tel"
-        placeholder="Cellulare (es. 333 123 4567)"
-        className={campo}
-      />
+      <div className="flex gap-3">
+        <input name="nome" required placeholder="Nome" className={campo} />
+        <input name="cognome" required placeholder="Cognome" className={campo} />
+      </div>
+      <div className="flex gap-3">
+        <select
+          name="prefisso"
+          defaultValue="+39"
+          aria-label="Prefisso internazionale"
+          className="shrink-0 rounded-xl border border-sabbia bg-white/60 px-3 py-3 font-mono text-sm outline-none transition focus:border-terracotta"
+        >
+          {PREFISSI.map((p) => (
+            <option key={p.code} value={p.code}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <input
+          name="telefono"
+          required
+          type="tel"
+          placeholder="Cellulare (es. 333 123 4567)"
+          className={campo}
+        />
+      </div>
       <input name="email" type="email" placeholder="Email (facoltativa)" className={campo} />
       {/* Honeypot: invisibile agli umani, irresistibile per i bot. */}
       <input
