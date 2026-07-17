@@ -1,0 +1,17 @@
+# Dipendenze
+node_modules/
+
+# Build Next.js
+.next/
+out/
+
+# Variabili d'ambiente (mai committare segreti)
+.env
+.env.*
+!.env.local.example
+
+# Vari
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+coverage/
