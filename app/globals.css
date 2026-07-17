@@ -1,1 +1,14 @@
 @import 'tailwindcss';
+
+/* Brand identity "Appunto" — palette e caratteri della tavola d'identità. */
+@theme {
+  --color-inchiostro: #211c18;
+  --color-terracotta: #be5537;
+  --color-argilla: #dda07a;
+  --color-sabbia: #e7dac7;
+  --color-crema: #f5efe6;
+
+  --font-display: 'Gloock', Georgia, serif;
+  --font-sans: 'Work Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
