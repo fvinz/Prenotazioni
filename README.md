@@ -27,7 +27,7 @@ npm run build   # build di produzione
 ## Migration Supabase
 
 Le migration sono in `supabase/migrations/`, da applicare in ordine
-(`0001`, `0002`, `0003`) sul progetto Supabase: via SQL Editor del
+(`0001` … `0004`) sul progetto Supabase: via SQL Editor del
 dashboard, oppure con la CLI:
 
 ```bash
