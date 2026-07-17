@@ -34,10 +34,10 @@ export async function GET(request: Request) {
 
   const supabase = getSupabaseServerClient();
 
-  // Salone: serve il timezone per interpretare 'date' come giorno locale.
+  // Salone: timezone per interpretare 'date' e config di prenotazione.
   const { data: tenant, error: tenantError } = await supabase
     .from('tenants')
-    .select('id, timezone')
+    .select('id, timezone, booking_horizon_days, min_lead_minutes')
     .eq('slug', tenantSlug)
     .maybeSingle();
   if (tenantError) {
@@ -52,6 +52,14 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Data non valida (attesa YYYY-MM-DD)' }, { status: 400 });
   }
   const dayEnd = dayStart.plus({ days: 1 });
+
+  // Fuori dall'orizzonte di prenotazione del salone (o nel passato):
+  // nessuno slot, senza nemmeno interrogare il DB.
+  const oggi = DateTime.now().setZone(tenant.timezone).startOf('day');
+  const scarto = dayStart.diff(oggi, 'days').days;
+  if (scarto < 0 || scarto >= tenant.booking_horizon_days) {
+    return NextResponse.json({ slots: [] });
+  }
 
   // Servizio (durata + buffer) e fasce dell'operatore: letture pubbliche
   // consentite dalle policy RLS. La RPC restituisce gli intervalli occupati
@@ -115,6 +123,7 @@ export async function GET(request: Request) {
     bookings: busy,
     timeOff: [],
     now: DateTime.utc().toISO(),
+    minLeadMinutes: tenant.min_lead_minutes,
   });
 
   return NextResponse.json({ slots });
