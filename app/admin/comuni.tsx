@@ -11,6 +11,7 @@ import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 export interface Salone {
   id: string;
   name: string;
+  slug: string;
   timezone: string;
 }
 
@@ -36,7 +37,7 @@ export function useSalone() {
       }
       const { data: membership, error } = await supabase
         .from('tenant_members')
-        .select('role, tenants(id, name, timezone)')
+        .select('role, tenants(id, name, slug, timezone)')
         .limit(1)
         .maybeSingle();
       const tenant = (membership?.tenants ?? null) as unknown as Salone | null;
