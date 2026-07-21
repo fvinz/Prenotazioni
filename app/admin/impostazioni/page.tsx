@@ -16,6 +16,7 @@ export interface Operatore {
   id: string;
   name: string;
   active: boolean;
+  ical_token: string;
 }
 
 export interface Servizio {
@@ -53,7 +54,11 @@ export default function ImpostazioniAdmin() {
   const ricarica = useCallback(async () => {
     if (!salone) return;
     const [ops, svc, av, os] = await Promise.all([
-      supabase.from('operators').select('id, name, active').eq('tenant_id', salone.id).order('name'),
+      supabase
+        .from('operators')
+        .select('id, name, active, ical_token')
+        .eq('tenant_id', salone.id)
+        .order('name'),
       supabase
         .from('services')
         .select('id, name, duration_minutes, buffer_minutes, price_cents, active')

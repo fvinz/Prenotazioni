@@ -51,6 +51,16 @@ export function SezioneTeam(props: {
     if (!error) props.onRicarica();
   }
 
+  const [copiato, setCopiato] = useState<string | null>(null);
+
+  // Collegamento al flusso iCal personale: l'operatore lo aggiunge come
+  // "calendario per URL" su Google/Apple/Outlook e vede i suoi appuntamenti.
+  async function copiaCalendario(op: Operatore) {
+    await navigator.clipboard.writeText(`${window.location.origin}/api/ical/${op.ical_token}`);
+    setCopiato(op.id);
+    setTimeout(() => setCopiato(null), 2000);
+  }
+
   return (
     <section>
       <h2 className="mb-2 font-display text-2xl">Team</h2>
@@ -103,6 +113,13 @@ export function SezioneTeam(props: {
                     className="text-inchiostro/60 hover:underline"
                   >
                     {o.active ? 'Disattiva' : 'Riattiva'}
+                  </button>
+                  <button
+                    onClick={() => copiaCalendario(o)}
+                    className="text-inchiostro/60 hover:underline"
+                    title="Copia il collegamento del calendario personale (iCal)"
+                  >
+                    {copiato === o.id ? 'Copiato ✓' : 'Calendario'}
                   </button>
                 </span>
               </>

@@ -10,6 +10,7 @@ import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { Intestazione, useSalone } from './comuni';
 import { NuovaPrenotazione } from './nuova-prenotazione';
+import { ProponiAlternative } from './proponi-alternative';
 
 interface Operatore {
   id: string;
@@ -19,6 +20,7 @@ interface Operatore {
 interface Prenotazione {
   id: string;
   operator_id: string;
+  service_id: string;
   starts_at: string;
   ends_at: string;
   status: string;
@@ -41,6 +43,7 @@ export default function AgendaAdmin() {
   const [prenotazioni, setPrenotazioni] = useState<Prenotazione[] | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
   const [nuova, setNuova] = useState(false);
+  const [proposta, setProposta] = useState<Prenotazione | null>(null);
 
   useEffect(() => {
     if (!salone) return;
@@ -62,7 +65,7 @@ export default function AgendaAdmin() {
     const { data: rows, error } = await supabase
       .from('bookings')
       .select(
-        'id, operator_id, starts_at, ends_at, status, services(name), customers(first_name, last_name, phone)',
+        'id, operator_id, service_id, starts_at, ends_at, status, services(name), customers(first_name, last_name, phone)',
       )
       .eq('tenant_id', salone.id)
       .gte('starts_at', inizio.toUTC().toISO()!)
@@ -79,7 +82,7 @@ export default function AgendaAdmin() {
     carica();
   }, [carica]);
 
-  async function cambiaStato(id: string, stato: 'completed' | 'no_show' | 'cancelled') {
+  async function cambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
     if (stato !== 'completed') {
       const domanda =
         stato === 'cancelled'
@@ -87,11 +90,13 @@ export default function AgendaAdmin() {
           : 'Segnare il cliente come no-show?';
       if (!window.confirm(domanda)) return;
     }
-    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', id);
+    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', p.id);
     if (error) {
       setErrore('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
       return;
     }
+    // Dopo un annullamento: proponi al cliente gli orari alternativi.
+    if (stato === 'cancelled' && p.customers) setProposta(p);
     carica();
   }
 
@@ -195,19 +200,19 @@ export default function AgendaAdmin() {
                           {p.status === 'confirmed' && (
                             <div className="flex shrink-0 flex-col items-end gap-1 text-sm">
                               <button
-                                onClick={() => cambiaStato(p.id, 'completed')}
+                                onClick={() => cambiaStato(p, 'completed')}
                                 className="text-inchiostro/70 hover:text-inchiostro hover:underline"
                               >
                                 ✓ Fatta
                               </button>
                               <button
-                                onClick={() => cambiaStato(p.id, 'no_show')}
+                                onClick={() => cambiaStato(p, 'no_show')}
                                 className="text-inchiostro/70 hover:text-inchiostro hover:underline"
                               >
                                 No-show
                               </button>
                               <button
-                                onClick={() => cambiaStato(p.id, 'cancelled')}
+                                onClick={() => cambiaStato(p, 'cancelled')}
                                 className="text-terracotta hover:underline"
                               >
                                 Annulla
@@ -221,6 +226,19 @@ export default function AgendaAdmin() {
               </section>
             ))}
         </div>
+      )}
+
+      {proposta && proposta.customers && (
+        <ProponiAlternative
+          salone={salone}
+          servizioId={proposta.service_id}
+          servizioNome={proposta.services?.name ?? 'Appuntamento'}
+          operatoreId={proposta.operator_id}
+          clienteNome={proposta.customers.first_name}
+          clienteTelefono={proposta.customers.phone}
+          vecchioInizio={proposta.starts_at}
+          onChiudi={() => setProposta(null)}
+        />
       )}
 
       {nuova && (
