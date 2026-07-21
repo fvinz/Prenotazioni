@@ -19,7 +19,7 @@ interface Cliente {
 
 export default function ClientiAdmin() {
   const supabase = getSupabaseBrowserClient();
-  const { salone, errore } = useSalone();
+  const { salone, ruolo, errore } = useSalone();
 
   const [query, setQuery] = useState('');
   const [clienti, setClienti] = useState<Cliente[] | null>(null);
@@ -58,7 +58,7 @@ export default function ClientiAdmin() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
-      <Intestazione salone={salone} />
+      <Intestazione salone={salone} ruolo={ruolo} />
 
       <input
         value={query}

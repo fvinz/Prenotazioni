@@ -52,7 +52,7 @@ export function useSalone() {
   return { salone, ruolo, errore };
 }
 
-export function Intestazione({ salone }: { salone: Salone }) {
+export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -64,6 +64,8 @@ export function Intestazione({ salone }: { salone: Salone }) {
   const sezioni = [
     { href: '/admin', label: 'Agenda' },
     { href: '/admin/clienti', label: 'Clienti' },
+    // La configurazione è del titolare (e il DB lo impone comunque).
+    ...(ruolo === 'owner' ? [{ href: '/admin/impostazioni', label: 'Impostazioni' }] : []),
   ];
 
   return (
