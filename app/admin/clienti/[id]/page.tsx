@@ -43,7 +43,7 @@ const euro = (cents: number) =>
 export default function SchedaCliente() {
   const { id } = useParams<{ id: string }>();
   const supabase = getSupabaseBrowserClient();
-  const { salone, errore } = useSalone();
+  const { salone, ruolo, errore } = useSalone();
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [storico, setStorico] = useState<Appuntamento[] | null>(null);
@@ -119,7 +119,7 @@ export default function SchedaCliente() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
-      <Intestazione salone={salone} />
+      <Intestazione salone={salone} ruolo={ruolo} />
 
       <Link href="/admin/clienti" className="text-sm text-terracotta hover:underline">
         ← Tutti i clienti
