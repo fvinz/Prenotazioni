@@ -68,12 +68,12 @@ export function SezioneTeam(props: {
         {props.operatori.map((o) => (
           <li
             key={o.id}
-            className={`flex items-center justify-between gap-3 rounded-xl border border-sabbia bg-white/60 px-4 py-3 ${
+            className={`rounded-xl border border-sabbia bg-white/60 px-4 py-3 ${
               o.active ? '' : 'opacity-50'
             }`}
           >
             {inModifica === o.id ? (
-              <>
+              <div className="flex items-center justify-between gap-3">
                 <input
                   value={nuovoNome}
                   onChange={(e) => setNuovoNome(e.target.value)}
@@ -91,37 +91,53 @@ export function SezioneTeam(props: {
                     Annulla
                   </button>
                 </span>
-              </>
+              </div>
             ) : (
               <>
-                <span className="min-w-0 truncate font-medium">
-                  {o.name}
-                  {!o.active && <span className="text-inchiostro/50"> · disattivato</span>}
-                </span>
-                <span className="flex shrink-0 gap-3 text-sm">
-                  <button
-                    onClick={() => {
-                      setInModifica(o.id);
-                      setNuovoNome(o.name);
-                    }}
-                    className="text-terracotta hover:underline"
-                  >
-                    Rinomina
-                  </button>
-                  <button
-                    onClick={() => attivaDisattiva(o)}
-                    className="text-inchiostro/60 hover:underline"
-                  >
-                    {o.active ? 'Disattiva' : 'Riattiva'}
-                  </button>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate font-medium">
+                    {o.name}
+                    {!o.active && <span className="text-inchiostro/50"> · disattivato</span>}
+                  </span>
+                  <span className="flex shrink-0 gap-3 text-sm">
+                    <button
+                      onClick={() => {
+                        setInModifica(o.id);
+                        setNuovoNome(o.name);
+                      }}
+                      className="text-terracotta hover:underline"
+                    >
+                      Rinomina
+                    </button>
+                    <button
+                      onClick={() => attivaDisattiva(o)}
+                      className="text-inchiostro/60 hover:underline"
+                    >
+                      {o.active ? 'Disattiva' : 'Riattiva'}
+                    </button>
+                  </span>
+                </div>
+                <div className="mt-3 border-t border-sabbia pt-3">
                   <button
                     onClick={() => copiaCalendario(o)}
-                    className="text-inchiostro/60 hover:underline"
-                    title="Copia il collegamento del calendario personale (iCal)"
+                    className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                      copiato === o.id
+                        ? 'border-terracotta bg-terracotta text-crema'
+                        : 'border-terracotta text-terracotta hover:bg-terracotta hover:text-crema'
+                    }`}
                   >
-                    {copiato === o.id ? 'Copiato ✓' : 'Calendario'}
+                    {copiato === o.id ? (
+                      <>Collegamento copiato ✓</>
+                    ) : (
+                      <>📅 Copia collegamento calendario</>
+                    )}
                   </button>
-                </span>
+                  <p className="mt-1.5 text-xs text-inchiostro/50">
+                    Incolla il collegamento su Google Calendar, Apple o Outlook (voce
+                    “Aggiungi da URL” / “Calendario in abbonamento”): gli appuntamenti di{' '}
+                    {o.name} compaiono nel calendario personale, in sola lettura.
+                  </p>
+                </div>
               </>
             )}
           </li>
