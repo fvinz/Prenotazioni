@@ -6,15 +6,10 @@
 // proprio salone (tenant_members -> my_tenant_ids nelle policy).
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
-
-interface Salone {
-  id: string;
-  name: string;
-  timezone: string;
-}
+import { Intestazione, useSalone } from './comuni';
+import { NuovaPrenotazione } from './nuova-prenotazione';
 
 interface Operatore {
   id: string;
@@ -32,49 +27,32 @@ interface Prenotazione {
 }
 
 const STATO: Record<string, string> = {
-  confirmed: 'confermata',
   cancelled: 'annullata',
   completed: 'completata',
   no_show: 'no-show',
 };
 
 export default function AgendaAdmin() {
-  const router = useRouter();
   const supabase = getSupabaseBrowserClient();
+  const { salone, errore: erroreAccesso } = useSalone();
 
-  const [salone, setSalone] = useState<Salone | null>(null);
   const [operatori, setOperatori] = useState<Operatore[]>([]);
   const [data, setData] = useState(() => DateTime.now().toISODate()!);
   const [prenotazioni, setPrenotazioni] = useState<Prenotazione[] | null>(null);
   const [errore, setErrore] = useState<string | null>(null);
+  const [nuova, setNuova] = useState(false);
 
-  // Guardia di accesso + caricamento del salone dell'utente.
   useEffect(() => {
+    if (!salone) return;
     (async () => {
-      const { data: sessione } = await supabase.auth.getSession();
-      if (!sessione.session) {
-        router.replace('/admin/login');
-        return;
-      }
-      const { data: membership, error } = await supabase
-        .from('tenant_members')
-        .select('tenants(id, name, timezone)')
-        .limit(1)
-        .maybeSingle();
-      const tenant = (membership?.tenants ?? null) as Salone | null;
-      if (error || !tenant) {
-        setErrore('Nessun salone associato a questo account.');
-        return;
-      }
-      setSalone(tenant);
       const { data: ops } = await supabase
         .from('operators')
         .select('id, name')
-        .eq('tenant_id', tenant.id)
+        .eq('tenant_id', salone.id)
         .order('name');
       setOperatori(ops ?? []);
     })();
-  }, [supabase, router]);
+  }, [supabase, salone]);
 
   // Prenotazioni del giorno selezionato (nel fuso del salone).
   const carica = useCallback(async () => {
@@ -101,25 +79,26 @@ export default function AgendaAdmin() {
     carica();
   }, [carica]);
 
-  async function annulla(id: string) {
-    if (!window.confirm('Annullare questa prenotazione?')) return;
-    const { error } = await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', id);
+  async function cambiaStato(id: string, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (stato !== 'completed') {
+      const domanda =
+        stato === 'cancelled'
+          ? 'Annullare questa prenotazione?'
+          : 'Segnare il cliente come no-show?';
+      if (!window.confirm(domanda)) return;
+    }
+    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', id);
     if (error) {
-      setErrore("Non sono riuscito ad annullare l'appuntamento. Riprova.");
+      setErrore('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
       return;
     }
     carica();
   }
 
-  async function esci() {
-    await supabase.auth.signOut();
-    router.replace('/admin/login');
-  }
-
-  if (errore) {
+  if (erroreAccesso || errore) {
     return (
       <main className="mx-auto max-w-lg p-8 text-center">
-        <p className="rounded-xl bg-sabbia p-4">{errore}</p>
+        <p className="rounded-xl bg-sabbia p-4">{erroreAccesso ?? errore}</p>
       </main>
     );
   }
@@ -133,19 +112,9 @@ export default function AgendaAdmin() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-8">
-      <header className="mb-6 flex items-baseline justify-between">
-        <div>
-          <p className="font-display text-2xl">
-            appunto<span className="text-terracotta">.</span>
-          </p>
-          <h1 className="mt-1 font-display text-3xl tracking-tight">{salone.name}</h1>
-        </div>
-        <button onClick={esci} className="text-sm text-terracotta hover:underline">
-          Esci
-        </button>
-      </header>
+      <Intestazione salone={salone} />
 
-      <div className="mb-6 flex items-center justify-between rounded-xl bg-sabbia px-4 py-2">
+      <div className="mb-4 flex items-center justify-between rounded-xl bg-sabbia px-4 py-2">
         <button
           onClick={() => setData(giorno.minus({ days: 1 }).toISODate()!)}
           className="font-medium text-terracotta"
@@ -174,6 +143,13 @@ export default function AgendaAdmin() {
         </button>
       </div>
 
+      <button
+        onClick={() => setNuova(true)}
+        className="mb-6 w-full rounded-xl bg-terracotta py-3 font-semibold text-crema transition hover:opacity-90"
+      >
+        + Nuova prenotazione
+      </button>
+
       {prenotazioni === null ? (
         <p className="text-center text-inchiostro/60">Un attimo…</p>
       ) : prenotazioni.length === 0 ? (
@@ -193,42 +169,71 @@ export default function AgendaAdmin() {
                     .map((p) => (
                       <li
                         key={p.id}
-                        className={`flex items-center justify-between gap-3 rounded-xl border border-sabbia bg-white/60 px-4 py-3 ${
+                        className={`rounded-xl border border-sabbia bg-white/60 px-4 py-3 ${
                           p.status === 'cancelled' ? 'opacity-50' : ''
                         }`}
                       >
-                        <div className="min-w-0">
-                          <p className="font-mono text-sm">
-                            {oraLocale(p.starts_at)}–{oraLocale(p.ends_at)}
-                          </p>
-                          <p className="truncate font-medium">
-                            {p.customers
-                              ? `${p.customers.first_name} ${p.customers.last_name ?? ''}`.trim()
-                              : 'Cliente'}
-                            <span className="font-normal text-inchiostro/60">
-                              {' '}
-                              · {p.services?.name ?? 'Servizio'}
-                            </span>
-                          </p>
-                          <p className="font-mono text-xs text-inchiostro/50">
-                            {p.customers?.phone}
-                            {p.status !== 'confirmed' && ` · ${STATO[p.status] ?? p.status}`}
-                          </p>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm">
+                              {oraLocale(p.starts_at)}–{oraLocale(p.ends_at)}
+                            </p>
+                            <p className="truncate font-medium">
+                              {p.customers
+                                ? `${p.customers.first_name} ${p.customers.last_name ?? ''}`.trim()
+                                : 'Cliente'}
+                              <span className="font-normal text-inchiostro/60">
+                                {' '}
+                                · {p.services?.name ?? 'Servizio'}
+                              </span>
+                            </p>
+                            <p className="font-mono text-xs text-inchiostro/50">
+                              {p.customers?.phone}
+                              {p.status !== 'confirmed' && ` · ${STATO[p.status] ?? p.status}`}
+                            </p>
+                          </div>
+                          {p.status === 'confirmed' && (
+                            <div className="flex shrink-0 flex-col items-end gap-1 text-sm">
+                              <button
+                                onClick={() => cambiaStato(p.id, 'completed')}
+                                className="text-inchiostro/70 hover:text-inchiostro hover:underline"
+                              >
+                                ✓ Fatta
+                              </button>
+                              <button
+                                onClick={() => cambiaStato(p.id, 'no_show')}
+                                className="text-inchiostro/70 hover:text-inchiostro hover:underline"
+                              >
+                                No-show
+                              </button>
+                              <button
+                                onClick={() => cambiaStato(p.id, 'cancelled')}
+                                className="text-terracotta hover:underline"
+                              >
+                                Annulla
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        {p.status === 'confirmed' && (
-                          <button
-                            onClick={() => annulla(p.id)}
-                            className="shrink-0 text-sm text-terracotta hover:underline"
-                          >
-                            Annulla
-                          </button>
-                        )}
                       </li>
                     ))}
                 </ul>
               </section>
             ))}
         </div>
+      )}
+
+      {nuova && (
+        <NuovaPrenotazione
+          salone={salone}
+          operatori={operatori}
+          dataIniziale={data}
+          onChiudi={() => setNuova(false)}
+          onCreata={() => {
+            setNuova(false);
+            carica();
+          }}
+        />
       )}
     </main>
   );
