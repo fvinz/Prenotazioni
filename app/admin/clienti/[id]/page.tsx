@@ -74,6 +74,21 @@ export default function SchedaCliente() {
     carica();
   }, [carica]);
 
+  async function cambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (stato !== 'completed') {
+      const domanda =
+        stato === 'cancelled'
+          ? 'Annullare questa prenotazione?'
+          : 'Segnare il cliente come no-show?';
+      if (!window.confirm(domanda)) return;
+    }
+    const { error } = await supabase
+      .from('bookings')
+      .update({ status: stato })
+      .eq('id', bookingId);
+    if (!error) carica();
+  }
+
   async function salvaNote() {
     setSalvataggio('saving');
     const { error } = await supabase.from('customers').update({ notes: note || null }).eq('id', id);
@@ -169,7 +184,30 @@ export default function SchedaCliente() {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="font-mono text-sm">{euro(a.price_cents)}</p>
-                  <p className="text-xs text-inchiostro/50">{STATO[a.status] ?? a.status}</p>
+                  {a.status === 'confirmed' ? (
+                    <p className="flex gap-2 text-xs">
+                      <button
+                        onClick={() => cambiaStato(a.id, 'completed')}
+                        className="text-inchiostro/70 hover:text-inchiostro hover:underline"
+                      >
+                        ✓ Fatta
+                      </button>
+                      <button
+                        onClick={() => cambiaStato(a.id, 'no_show')}
+                        className="text-inchiostro/70 hover:text-inchiostro hover:underline"
+                      >
+                        No-show
+                      </button>
+                      <button
+                        onClick={() => cambiaStato(a.id, 'cancelled')}
+                        className="text-terracotta hover:underline"
+                      >
+                        Annulla
+                      </button>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-inchiostro/50">{STATO[a.status] ?? a.status}</p>
+                  )}
                 </div>
               </li>
             ))}
