@@ -1,8 +1,9 @@
 'use client';
 
-// Orari settimanali per operatore: fasce per giorno, con aggiunta e
-// rimozione. weekday in convenzione Postgres (0=domenica ... 6=sabato),
-// mostrato però da lunedì a domenica come ci si aspetta in Italia.
+// Orari settimanali: per singolo operatore oppure per "Tutto il team"
+// (la fascia si applica a tutti gli operatori attivi in un colpo solo).
+// weekday in convenzione Postgres (0=domenica ... 6=sabato), mostrato
+// però da lunedì a domenica come ci si aspetta in Italia.
 
 import { useState } from 'react';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
@@ -19,6 +20,8 @@ const GIORNI: { weekday: number; nome: string }[] = [
   { weekday: 0, nome: 'Domenica' },
 ];
 
+const TUTTI = '__tutti__';
+
 export function SezioneOrari(props: {
   salone: Salone;
   operatori: Operatore[];
@@ -26,8 +29,11 @@ export function SezioneOrari(props: {
   onRicarica: () => void;
 }) {
   const supabase = getSupabaseBrowserClient();
-  const [operatoreId, setOperatoreId] = useState(props.operatori[0]?.id ?? '');
+  const [selezione, setSelezione] = useState(TUTTI);
   const [errore, setErrore] = useState<string | null>(null);
+
+  const attivi = props.operatori.filter((o) => o.active);
+  const idAttivi = new Set(attivi.map((o) => o.id));
 
   async function aggiungi(e: React.FormEvent<HTMLFormElement>, weekday: number) {
     e.preventDefault();
@@ -35,13 +41,16 @@ export function SezioneOrari(props: {
     const form = new FormData(e.currentTarget);
     const dalle = String(form.get('dalle'));
     const alle = String(form.get('alle'));
-    const { error } = await supabase.from('availability').insert({
-      tenant_id: props.salone.id,
-      operator_id: operatoreId,
-      weekday,
-      start_time: dalle,
-      end_time: alle,
-    });
+    const destinatari = selezione === TUTTI ? attivi.map((o) => o.id) : [selezione];
+    const { error } = await supabase.from('availability').insert(
+      destinatari.map((operatorId) => ({
+        tenant_id: props.salone.id,
+        operator_id: operatorId,
+        weekday,
+        start_time: dalle,
+        end_time: alle,
+      })),
+    );
     if (error) {
       setErrore('Fascia non valida: l’orario di fine deve seguire quello di inizio.');
       return;
@@ -49,22 +58,52 @@ export function SezioneOrari(props: {
     props.onRicarica();
   }
 
-  async function rimuovi(id: string) {
-    const { error } = await supabase.from('availability').delete().eq('id', id);
+  async function rimuovi(ids: string[]) {
+    const { error } = await supabase.from('availability').delete().in('id', ids);
     if (!error) props.onRicarica();
   }
 
   const hm = (t: string) => t.slice(0, 5);
 
+  /** Le fasce da mostrare per un giorno, raggruppate se "Tutto il team". */
+  function fasceDelGiorno(weekday: number): { etichetta: string; ids: string[] }[] {
+    if (selezione !== TUTTI) {
+      return props.fasce
+        .filter((f) => f.operator_id === selezione && f.weekday === weekday)
+        .map((f) => ({ etichetta: `${hm(f.start_time)}–${hm(f.end_time)}`, ids: [f.id] }));
+    }
+    // Gruppo per orario identico tra gli operatori attivi; se non copre
+    // tutto il team, l'etichetta lo dice (es. "· 2/3").
+    const gruppi = new Map<string, { etichetta: string; ids: string[]; conta: number }>();
+    for (const f of props.fasce) {
+      if (f.weekday !== weekday || !idAttivi.has(f.operator_id)) continue;
+      const chiave = `${f.start_time}|${f.end_time}`;
+      const gruppo = gruppi.get(chiave) ?? {
+        etichetta: `${hm(f.start_time)}–${hm(f.end_time)}`,
+        ids: [],
+        conta: 0,
+      };
+      gruppo.ids.push(f.id);
+      gruppo.conta += 1;
+      gruppi.set(chiave, gruppo);
+    }
+    return [...gruppi.values()].map((g) => ({
+      etichetta:
+        g.conta === attivi.length ? g.etichetta : `${g.etichetta} · ${g.conta}/${attivi.length}`,
+      ids: g.ids,
+    }));
+  }
+
   return (
     <section>
       <h2 className="mb-2 font-display text-2xl">Orari</h2>
       <select
-        value={operatoreId}
-        onChange={(e) => setOperatoreId(e.target.value)}
+        value={selezione}
+        onChange={(e) => setSelezione(e.target.value)}
         className="mb-3 w-full rounded-xl border border-sabbia bg-white/60 px-4 py-2 outline-none transition focus:border-terracotta"
         aria-label="Operatore"
       >
+        <option value={TUTTI}>Tutto il team ({attivi.length} operatori)</option>
         {props.operatori.map((o) => (
           <option key={o.id} value={o.id}>
             {o.name}
@@ -74,9 +113,7 @@ export function SezioneOrari(props: {
 
       <div className="space-y-2">
         {GIORNI.map((g) => {
-          const delGiorno = props.fasce.filter(
-            (f) => f.operator_id === operatoreId && f.weekday === g.weekday,
-          );
+          const delGiorno = fasceDelGiorno(g.weekday);
           return (
             <div
               key={g.weekday}
@@ -89,12 +126,12 @@ export function SezioneOrari(props: {
                 )}
                 {delGiorno.map((f) => (
                   <span
-                    key={f.id}
+                    key={f.ids.join(',')}
                     className="flex items-center gap-1.5 rounded-lg bg-sabbia px-2 py-0.5 font-mono text-sm"
                   >
-                    {hm(f.start_time)}–{hm(f.end_time)}
+                    {f.etichetta}
                     <button
-                      onClick={() => rimuovi(f.id)}
+                      onClick={() => rimuovi(f.ids)}
                       aria-label="Rimuovi fascia"
                       className="text-terracotta hover:opacity-70"
                     >
@@ -132,8 +169,9 @@ export function SezioneOrari(props: {
       </div>
       {errore && <p className="mt-1 text-sm text-terracotta">{errore}</p>}
       <p className="mt-2 text-xs text-inchiostro/50">
-        Le fasce valgono per il widget pubblico. Le prenotazioni manuali dall’agenda
-        possono comunque uscirne.
+        Con “Tutto il team” la fascia si applica a ogni operatore attivo (e la ×
+        la rimuove a tutti). Le fasce valgono per il widget pubblico: le
+        prenotazioni manuali dall’agenda possono comunque uscirne.
       </p>
     </section>
   );
