@@ -51,7 +51,7 @@ export default function MetricheAdmin() {
     for (let inizio = 0; ; inizio += PAGINA) {
       const { data: rows, error } = await supabase
         .from('bookings')
-        .select('operator_id, service_id, customer_id, starts_at, ends_at, status, price_cents')
+        .select('operator_id, service_id, customer_id, starts_at, ends_at, status, price_cents, source')
         .eq('tenant_id', salone.id)
         .gte('starts_at', dallIso)
         .order('starts_at')
@@ -68,6 +68,7 @@ export default function MetricheAdmin() {
         ends_at: string;
         status: Prenotazione['status'];
         price_cents: number;
+        source: string;
       }[];
       bookings.push(
         ...blocco.map((b) => ({
@@ -78,6 +79,7 @@ export default function MetricheAdmin() {
           endsAt: b.ends_at,
           status: b.status,
           priceCents: b.price_cents,
+          source: b.source,
         })),
       );
       if (blocco.length < PAGINA) break;
@@ -87,12 +89,14 @@ export default function MetricheAdmin() {
       supabase.from('operators').select('id, name').eq('tenant_id', salone.id).order('name'),
       supabase.from('services').select('id, name').eq('tenant_id', salone.id),
       supabase.from('availability').select('operator_id, weekday, start_time, end_time').eq('tenant_id', salone.id),
-      supabase.from('customers').select('id, first_name, last_name').eq('tenant_id', salone.id),
+      supabase.from('customers').select('id, first_name, last_name, created_at').eq('tenant_id', salone.id),
     ]);
 
     const nomiClienti: Record<string, string> = {};
+    const clientiCreatoIl: Record<string, string> = {};
     for (const c of custRes.data ?? []) {
       nomiClienti[c.id] = `${c.first_name} ${c.last_name ?? ''}`.trim();
+      clientiCreatoIl[c.id] = c.created_at;
     }
 
     setDati(
@@ -110,6 +114,7 @@ export default function MetricheAdmin() {
           endMin: minutiDaOra(String(a.end_time)),
         })),
         nomiClienti,
+        clientiCreatoIl,
       }),
     );
   }, [supabase, salone, ruolo, periodo]);
@@ -171,8 +176,15 @@ export default function MetricheAdmin() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Riquadro etichetta="Incasso" valore={euro(dati.incassoCents)} />
             <Riquadro etichetta="Appuntamenti" valore={String(dati.nCompletati)} />
-            <Riquadro etichetta="No-show" valore={pct(dati.tassoNoShow)} accento />
+            <Riquadro etichetta="Scontrino medio" valore={euro(dati.scontrinoMedioCents)} />
             <Riquadro etichetta="Valore medio cliente" valore={euro(dati.valoreMedioClienteCents)} />
+            <Riquadro etichetta="No-show" valore={pct(dati.tassoNoShow)} accento />
+            <Riquadro etichetta="Cancellazioni" valore={pct(dati.tassoCancellazione)} />
+            <Riquadro etichetta="Ore lavorate" valore={`${dati.oreLavorate} h`} />
+            <Riquadro
+              etichetta="Nuovi / di ritorno"
+              valore={`${dati.nuoviClienti} / ${dati.clientiRitorno}`}
+            />
           </div>
 
           {/* Riempimento per giorno */}
@@ -184,6 +196,14 @@ export default function MetricheAdmin() {
                 etichetta: pct(g.occupazione),
               }))}
               max={1}
+            />
+          </Sezione>
+
+          {/* Ore di punta */}
+          <Sezione titolo="Ore di punta" sottotitolo="Appuntamenti per ora d'inizio.">
+            <BarreMensili
+              voci={dati.perFasciaOraria.map((f) => ({ nome: `${f.ora}`, valore: f.n }))}
+              formato={(v) => `${v}`}
             />
           </Sezione>
 
@@ -216,6 +236,8 @@ export default function MetricheAdmin() {
                     <th className="py-2 px-2 text-right font-medium">Impiego</th>
                     <th className="py-2 px-2 text-right font-medium">Incasso</th>
                     <th className="py-2 px-2 text-right font-medium">€/ora</th>
+                    <th className="py-2 px-2 text-right font-medium">Scontrino</th>
+                    <th className="py-2 px-2 text-right font-medium">Clienti</th>
                     <th className="py-2 pl-2 text-right font-medium">No-show</th>
                   </tr>
                 </thead>
@@ -236,6 +258,8 @@ export default function MetricheAdmin() {
                       </td>
                       <td className="py-2 px-2 text-right tabular-nums">{euro(o.incassoCents)}</td>
                       <td className="py-2 px-2 text-right tabular-nums">{euro(o.resaOrariaCents)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{euro(o.scontrinoMedioCents)}</td>
+                      <td className="py-2 px-2 text-right tabular-nums">{o.clientiUnici}</td>
                       <td className="py-2 pl-2 text-right tabular-nums">{pct(o.tassoNoShow)}</td>
                     </tr>
                   ))}
@@ -244,22 +268,58 @@ export default function MetricheAdmin() {
             </div>
           </Sezione>
 
+          {/* Canale di prenotazione */}
+          <Sezione titolo="Come prenotano" sottotitolo="Canale delle prenotazioni.">
+            <Barre
+              voci={dati.perCanale.map((c) => ({
+                nome: c.canale,
+                valore: c.n,
+                etichetta: String(c.n),
+              }))}
+              max={Math.max(1, ...dati.perCanale.map((c) => c.n))}
+            />
+          </Sezione>
+
           {/* Migliori clienti */}
           <Sezione titolo="Migliori clienti" sottotitolo="Per valore nel periodo.">
-            <ul className="space-y-1.5">
-              {dati.topClienti.map((c, i) => (
-                <li
-                  key={i}
-                  className="flex items-baseline justify-between border-b border-sabbia/60 py-1.5 text-sm"
-                >
-                  <span className="truncate">{c.nome}</span>
-                  <span className="ml-3 shrink-0 tabular-nums text-inchiostro/70">
-                    {euro(c.incassoCents)} · {c.n} appunt.
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <ElencoClienti
+              voci={dati.topClienti.map((c) => ({
+                nome: c.nome,
+                destra: `${euro(c.incassoCents)} · ${c.n} appunt.`,
+              }))}
+            />
           </Sezione>
+
+          {/* Clienti da recuperare */}
+          {dati.clientiDaRecuperare.length > 0 && (
+            <Sezione
+              titolo="Da recuperare"
+              sottotitolo="Clienti abituali che non tornano da un po'."
+            >
+              <ElencoClienti
+                voci={dati.clientiDaRecuperare.map((c) => ({
+                  nome: c.nome,
+                  destra: `${c.giorni} gg fa · ${euro(c.valoreCents)} spesi`,
+                }))}
+              />
+            </Sezione>
+          )}
+
+          {/* Clienti inaffidabili */}
+          {dati.clientiInaffidabili.length > 0 && (
+            <Sezione
+              titolo="Alto tasso di no-show"
+              sottotitolo="Candidati a chiedere un acconto alla prenotazione."
+            >
+              <ElencoClienti
+                voci={dati.clientiInaffidabili.map((c) => ({
+                  nome: c.nome,
+                  destra: `${pct(c.tassoNoShow)} su ${c.n} appunt.`,
+                  accento: true,
+                }))}
+              />
+            </Sezione>
+          )}
         </div>
       )}
     </main>
@@ -315,8 +375,14 @@ function Barre({ voci, max }: { voci: { nome: string; valore: number; etichetta:
   );
 }
 
-// Barre verticali per la stagionalità mensile.
-function BarreMensili({ voci }: { voci: { nome: string; valore: number }[] }) {
+// Barre verticali (stagionalità mensile, ore di punta).
+function BarreMensili({
+  voci,
+  formato = euro,
+}: {
+  voci: { nome: string; valore: number }[];
+  formato?: (v: number) => string;
+}) {
   const max = Math.max(1, ...voci.map((v) => v.valore));
   return (
     <div className="flex items-end gap-1.5 overflow-x-auto pb-1" style={{ height: 140 }}>
@@ -325,11 +391,36 @@ function BarreMensili({ voci }: { voci: { nome: string; valore: number }[] }) {
           <span
             className="w-full rounded-t-md bg-terracotta"
             style={{ height: `${Math.max(2, (v.valore / max) * 100)}%` }}
-            title={euro(v.valore)}
+            title={formato(v.valore)}
           />
           <span className="whitespace-nowrap text-[10px] capitalize text-inchiostro/50">{v.nome}</span>
         </div>
       ))}
     </div>
+  );
+}
+
+// Elenco cliente + valore a destra (usato da più sezioni).
+function ElencoClienti({
+  voci,
+}: {
+  voci: { nome: string; destra: string; accento?: boolean }[];
+}) {
+  return (
+    <ul className="space-y-1.5">
+      {voci.map((v, i) => (
+        <li
+          key={i}
+          className="flex items-baseline justify-between border-b border-sabbia/60 py-1.5 text-sm"
+        >
+          <span className="truncate">{v.nome}</span>
+          <span
+            className={`ml-3 shrink-0 tabular-nums ${v.accento ? 'text-terracotta' : 'text-inchiostro/70'}`}
+          >
+            {v.destra}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

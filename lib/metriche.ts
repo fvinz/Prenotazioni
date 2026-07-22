@@ -25,6 +25,8 @@ export interface Prenotazione {
   endsAt: string;
   status: 'confirmed' | 'completed' | 'no_show' | 'cancelled';
   priceCents: number;
+  /** Canale: 'widget' | 'manual' | altro. */
+  source?: string;
 }
 
 export interface FasciaDisp {
@@ -46,6 +48,8 @@ export interface MetricheInput {
   disponibilita: FasciaDisp[];
   /** id cliente -> nome completo, per la classifica. */
   nomiClienti: Record<string, string>;
+  /** id cliente -> data di creazione ISO, per "nuovi vs di ritorno". */
+  clientiCreatoIl?: Record<string, string>;
 }
 
 export interface MetricheOperatore {
@@ -58,6 +62,8 @@ export interface MetricheOperatore {
   tassoNoShow: number;
   /** incasso / ore effettivamente lavorate (completate). */
   resaOrariaCents: number;
+  clientiUnici: number;
+  scontrinoMedioCents: number;
 }
 
 export interface Metriche {
@@ -65,14 +71,27 @@ export interface Metriche {
   nCompletati: number;
   nAppuntamenti: number;
   tassoNoShow: number;
+  tassoCancellazione: number;
   valoreMedioClienteCents: number;
+  scontrinoMedioCents: number;
   resaOrariaCents: number;
+  oreLavorate: number;
+  nuoviClienti: number;
+  clientiRitorno: number;
   /** Occupazione media 0..1 per giorno della settimana, lun..dom. */
   perGiorno: { weekday: number; nome: string; occupazione: number }[];
+  /** Volume di appuntamenti per ora d'inizio (ore di punta). */
+  perFasciaOraria: { ora: number; n: number }[];
+  /** Canale di prenotazione: Widget / Manuale / Altro. */
+  perCanale: { canale: string; n: number }[];
   perMese: { mese: string; etichetta: string; incassoCents: number; n: number }[];
   perServizio: { id: string; nome: string; incassoCents: number; n: number }[];
   perOperatore: MetricheOperatore[];
   topClienti: { nome: string; incassoCents: number; n: number }[];
+  /** Clienti abituali che non tornano da >= 60 giorni. */
+  clientiDaRecuperare: { nome: string; giorni: number; n: number; valoreCents: number }[];
+  /** Clienti con alto tasso di no-show (candidati all'acconto). */
+  clientiInaffidabili: { nome: string; tassoNoShow: number; n: number }[];
 }
 
 const NOMI_GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
@@ -106,6 +125,7 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
   const nonAnnullate = bookings.filter((b) => b.status !== 'cancelled');
   const completate = bookings.filter((b) => b.status === 'completed');
   const noShow = bookings.filter((b) => b.status === 'no_show');
+  const annullate = bookings.filter((b) => b.status === 'cancelled');
 
   const incassoCents = completate.reduce((s, b) => s + b.priceCents, 0);
   const oreCompletate = completate.reduce((s, b) => s + durataMin(b), 0) / 60;
@@ -181,8 +201,85 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
           ? sueNoShow.length / (sueComplete.length + sueNoShow.length)
           : 0,
       resaOrariaCents: oreLav > 0 ? Math.round(incasso / oreLav) : 0,
+      clientiUnici: new Set(sueComplete.map((b) => b.customerId)).size,
+      scontrinoMedioCents: sueComplete.length > 0 ? Math.round(incasso / sueComplete.length) : 0,
     };
   });
+
+  // --- Volume per ora d'inizio (ore di punta) --------------------------
+  const conteggioOra = new Map<number, number>();
+  for (const b of nonAnnullate) {
+    const ora = DateTime.fromISO(b.startsAt).setZone(timezone).hour;
+    conteggioOra.set(ora, (conteggioOra.get(ora) ?? 0) + 1);
+  }
+  const perFasciaOraria = [...conteggioOra.entries()]
+    .map(([ora, n]) => ({ ora, n }))
+    .sort((a, b) => a.ora - b.ora);
+
+  // --- Canale di prenotazione -----------------------------------------
+  const etichettaCanale = (s?: string) =>
+    s === 'widget' ? 'Widget' : s === 'manual' ? 'Manuale' : 'Altro';
+  const conteggioCanale = new Map<string, number>();
+  for (const b of bookings) {
+    const c = etichettaCanale(b.source);
+    conteggioCanale.set(c, (conteggioCanale.get(c) ?? 0) + 1);
+  }
+  const perCanale = [...conteggioCanale.entries()]
+    .map(([canale, n]) => ({ canale, n }))
+    .sort((a, b) => b.n - a.n);
+
+  // --- Nuovi clienti vs di ritorno nel periodo -------------------------
+  const clientiCreatoIl = input.clientiCreatoIl ?? {};
+  const clientiDelPeriodo = new Set(nonAnnullate.map((b) => b.customerId));
+  let nuoviClienti = 0;
+  let clientiRitorno = 0;
+  for (const id of clientiDelPeriodo) {
+    const creato = clientiCreatoIl[id];
+    if (creato && DateTime.fromISO(creato) >= inizio) nuoviClienti += 1;
+    else clientiRitorno += 1;
+  }
+
+  // --- Clienti da recuperare + inaffidabili ----------------------------
+  const ora = DateTime.now();
+  interface AggCliente {
+    ultimo: number;
+    completati: number;
+    noShow: number;
+    valore: number;
+  }
+  const aggCliente = new Map<string, AggCliente>();
+  for (const b of bookings) {
+    const a = aggCliente.get(b.customerId) ?? { ultimo: 0, completati: 0, noShow: 0, valore: 0 };
+    const ms = DateTime.fromISO(b.startsAt).toMillis();
+    if (b.status === 'completed') {
+      a.completati += 1;
+      a.valore += b.priceCents;
+      if (ms > a.ultimo) a.ultimo = ms;
+    } else if (b.status === 'no_show') {
+      a.noShow += 1;
+    }
+    aggCliente.set(b.customerId, a);
+  }
+  const clientiDaRecuperare = [...aggCliente.entries()]
+    .filter(([, a]) => a.completati >= 2 && a.ultimo > 0)
+    .map(([id, a]) => ({
+      nome: nomiClienti[id] ?? 'Cliente',
+      giorni: Math.floor(ora.diff(DateTime.fromMillis(a.ultimo), 'days').days),
+      n: a.completati,
+      valoreCents: a.valore,
+    }))
+    .filter((c) => c.giorni >= 60)
+    .sort((a, b) => b.valoreCents - a.valoreCents)
+    .slice(0, 8);
+  const clientiInaffidabili = [...aggCliente.entries()]
+    .map(([id, a]) => ({
+      nome: nomiClienti[id] ?? 'Cliente',
+      tassoNoShow: a.completati + a.noShow > 0 ? a.noShow / (a.completati + a.noShow) : 0,
+      n: a.completati + a.noShow,
+    }))
+    .filter((c) => c.n >= 3 && c.tassoNoShow >= 0.25)
+    .sort((a, b) => b.tassoNoShow - a.tassoNoShow || b.n - a.n)
+    .slice(0, 8);
 
   // --- Migliori clienti per valore ------------------------------------
   const mappaCliente = new Map<string, { incassoCents: number; n: number }>();
@@ -205,12 +302,104 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
       completate.length + noShow.length > 0
         ? noShow.length / (completate.length + noShow.length)
         : 0,
+    tassoCancellazione: bookings.length > 0 ? annullate.length / bookings.length : 0,
     valoreMedioClienteCents: clientiCompletati.size > 0 ? Math.round(incassoCents / clientiCompletati.size) : 0,
+    scontrinoMedioCents: completate.length > 0 ? Math.round(incassoCents / completate.length) : 0,
     resaOrariaCents: oreCompletate > 0 ? Math.round(incassoCents / oreCompletate) : 0,
+    oreLavorate: Math.round(oreCompletate),
+    nuoviClienti,
+    clientiRitorno,
     perGiorno,
+    perFasciaOraria,
+    perCanale,
     perMese,
     perServizio,
     perOperatore,
     topClienti,
+    clientiDaRecuperare,
+    clientiInaffidabili,
+  };
+}
+
+// =====================================================================
+//  Statistiche del singolo cliente (per la sua scheda).
+// =====================================================================
+
+export interface StatCliente {
+  valoreTotaleCents: number;
+  scontrinoMedioCents: number;
+  nCompletati: number;
+  tassoNoShow: number;
+  operatorePreferito: string | null;
+  serviziAbituali: { nome: string; n: number }[];
+  /** Giorni medi tra un appuntamento completato e il successivo. */
+  frequenzaGiorni: number | null;
+  ultimoIso: string | null;
+  giorniDaUltimo: number | null;
+  prossimoIso: string | null;
+}
+
+export function calcolaStatCliente(input: {
+  bookings: Prenotazione[];
+  operatori: { id: string; name: string }[];
+  servizi: { id: string; name: string }[];
+  now: string;
+}): StatCliente {
+  const { bookings, operatori, servizi, now } = input;
+  const nomeOp = new Map(operatori.map((o) => [o.id, o.name]));
+  const nomeSvc = new Map(servizi.map((s) => [s.id, s.name]));
+  const adesso = DateTime.fromISO(now);
+
+  const completate = bookings
+    .filter((b) => b.status === 'completed')
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const noShow = bookings.filter((b) => b.status === 'no_show');
+
+  const valoreTotaleCents = completate.reduce((s, b) => s + b.priceCents, 0);
+
+  // Operatore più frequentato (sui completati).
+  const perOp = new Map<string, number>();
+  for (const b of completate) perOp.set(b.operatorId, (perOp.get(b.operatorId) ?? 0) + 1);
+  const operatoreTop = [...perOp.entries()].sort((a, b) => b[1] - a[1])[0];
+
+  // Servizi abituali.
+  const perSvc = new Map<string, number>();
+  for (const b of completate) perSvc.set(b.serviceId, (perSvc.get(b.serviceId) ?? 0) + 1);
+  const serviziAbituali = [...perSvc.entries()]
+    .map(([id, n]) => ({ nome: nomeSvc.get(id) ?? 'Servizio', n }))
+    .sort((a, b) => b.n - a.n);
+
+  // Frequenza media: media degli intervalli tra completati consecutivi.
+  let frequenzaGiorni: number | null = null;
+  if (completate.length >= 2) {
+    let somma = 0;
+    for (let i = 1; i < completate.length; i++) {
+      somma += DateTime.fromISO(completate[i].startsAt).diff(
+        DateTime.fromISO(completate[i - 1].startsAt),
+        'days',
+      ).days;
+    }
+    frequenzaGiorni = Math.round(somma / (completate.length - 1));
+  }
+
+  const ultimo = completate.length > 0 ? completate[completate.length - 1].startsAt : null;
+  const prossimo = bookings
+    .filter((b) => b.status === 'confirmed' && DateTime.fromISO(b.startsAt) > adesso)
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0]?.startsAt ?? null;
+
+  return {
+    valoreTotaleCents,
+    scontrinoMedioCents: completate.length > 0 ? Math.round(valoreTotaleCents / completate.length) : 0,
+    nCompletati: completate.length,
+    tassoNoShow:
+      completate.length + noShow.length > 0
+        ? noShow.length / (completate.length + noShow.length)
+        : 0,
+    operatorePreferito: operatoreTop ? nomeOp.get(operatoreTop[0]) ?? null : null,
+    serviziAbituali,
+    frequenzaGiorni,
+    ultimoIso: ultimo,
+    giorniDaUltimo: ultimo ? Math.floor(adesso.diff(DateTime.fromISO(ultimo), 'days').days) : null,
+    prossimoIso: prossimo,
   };
 }
