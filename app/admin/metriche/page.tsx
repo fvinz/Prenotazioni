@@ -6,6 +6,7 @@
 // recuperano i dati del periodo e si disegna. Tinta unica: terracotta.
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { calcolaMetriche, type Metriche, type Prenotazione } from '@/lib/metriche';
@@ -284,6 +285,7 @@ export default function MetricheAdmin() {
           <Sezione titolo="Migliori clienti" sottotitolo="Per valore nel periodo.">
             <ElencoClienti
               voci={dati.topClienti.map((c) => ({
+                id: c.id,
                 nome: c.nome,
                 destra: `${euro(c.incassoCents)} · ${c.n} appunt.`,
               }))}
@@ -298,6 +300,7 @@ export default function MetricheAdmin() {
             >
               <ElencoClienti
                 voci={dati.clientiDaRecuperare.map((c) => ({
+                  id: c.id,
                   nome: c.nome,
                   destra: `${c.giorni} gg fa · ${euro(c.valoreCents)} spesi`,
                 }))}
@@ -313,6 +316,7 @@ export default function MetricheAdmin() {
             >
               <ElencoClienti
                 voci={dati.clientiInaffidabili.map((c) => ({
+                  id: c.id,
                   nome: c.nome,
                   destra: `${pct(c.tassoNoShow)} su ${c.n} appunt.`,
                   accento: true,
@@ -384,27 +388,43 @@ function BarreMensili({
   formato?: (v: number) => string;
 }) {
   const max = Math.max(1, ...voci.map((v) => v.valore));
+  // L'area delle barre ha un'altezza fissa e propria (items-end da sola
+  // non basta: senza un'altezza esplicita sulla colonna, l'altezza in %
+  // della barra non ha nulla a cui riferirsi e collassa a 0). Le etichette
+  // vivono in una riga separata sotto, così non intaccano l'altezza dell'area.
   return (
-    <div className="flex items-end gap-1.5 overflow-x-auto pb-1" style={{ height: 140 }}>
-      {voci.map((v, i) => (
-        <div key={i} className="flex min-w-[28px] flex-1 flex-col items-center justify-end gap-1">
+    <div className="overflow-x-auto pb-1">
+      <div className="flex items-end gap-1.5" style={{ height: 140 }}>
+        {voci.map((v, i) => (
+          <div key={i} className="flex h-full min-w-[28px] flex-1 items-end">
+            <span
+              className="w-full rounded-t-md bg-terracotta"
+              style={{ height: `${Math.max(2, (v.valore / max) * 100)}%` }}
+              title={formato(v.valore)}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex gap-1.5">
+        {voci.map((v, i) => (
           <span
-            className="w-full rounded-t-md bg-terracotta"
-            style={{ height: `${Math.max(2, (v.valore / max) * 100)}%` }}
-            title={formato(v.valore)}
-          />
-          <span className="whitespace-nowrap text-[10px] capitalize text-inchiostro/50">{v.nome}</span>
-        </div>
-      ))}
+            key={i}
+            className="min-w-[28px] flex-1 whitespace-nowrap text-center text-[10px] capitalize text-inchiostro/50"
+          >
+            {v.nome}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
 
-// Elenco cliente + valore a destra (usato da più sezioni).
+// Elenco cliente + valore a destra (usato da più sezioni). Il nome
+// collega alla scheda del cliente quando è disponibile il suo id.
 function ElencoClienti({
   voci,
 }: {
-  voci: { nome: string; destra: string; accento?: boolean }[];
+  voci: { id?: string; nome: string; destra: string; accento?: boolean }[];
 }) {
   return (
     <ul className="space-y-1.5">
@@ -413,7 +433,16 @@ function ElencoClienti({
           key={i}
           className="flex items-baseline justify-between border-b border-sabbia/60 py-1.5 text-sm"
         >
-          <span className="truncate">{v.nome}</span>
+          {v.id ? (
+            <Link
+              href={`/admin/clienti/${v.id}`}
+              className="truncate text-terracotta hover:underline"
+            >
+              {v.nome}
+            </Link>
+          ) : (
+            <span className="truncate">{v.nome}</span>
+          )}
           <span
             className={`ml-3 shrink-0 tabular-nums ${v.accento ? 'text-terracotta' : 'text-inchiostro/70'}`}
           >

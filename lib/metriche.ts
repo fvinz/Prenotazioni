@@ -87,11 +87,11 @@ export interface Metriche {
   perMese: { mese: string; etichetta: string; incassoCents: number; n: number }[];
   perServizio: { id: string; nome: string; incassoCents: number; n: number }[];
   perOperatore: MetricheOperatore[];
-  topClienti: { nome: string; incassoCents: number; n: number }[];
+  topClienti: { id: string; nome: string; incassoCents: number; n: number }[];
   /** Clienti abituali che non tornano da >= 60 giorni. */
-  clientiDaRecuperare: { nome: string; giorni: number; n: number; valoreCents: number }[];
+  clientiDaRecuperare: { id: string; nome: string; giorni: number; n: number; valoreCents: number }[];
   /** Clienti con alto tasso di no-show (candidati all'acconto). */
-  clientiInaffidabili: { nome: string; tassoNoShow: number; n: number }[];
+  clientiInaffidabili: { id: string; nome: string; tassoNoShow: number; n: number }[];
 }
 
 const NOMI_GIORNI = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
@@ -263,6 +263,7 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
   const clientiDaRecuperare = [...aggCliente.entries()]
     .filter(([, a]) => a.completati >= 2 && a.ultimo > 0)
     .map(([id, a]) => ({
+      id,
       nome: nomiClienti[id] ?? 'Cliente',
       giorni: Math.floor(ora.diff(DateTime.fromMillis(a.ultimo), 'days').days),
       n: a.completati,
@@ -273,6 +274,7 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
     .slice(0, 8);
   const clientiInaffidabili = [...aggCliente.entries()]
     .map(([id, a]) => ({
+      id,
       nome: nomiClienti[id] ?? 'Cliente',
       tassoNoShow: a.completati + a.noShow > 0 ? a.noShow / (a.completati + a.noShow) : 0,
       n: a.completati + a.noShow,
@@ -290,7 +292,7 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
     mappaCliente.set(b.customerId, cur);
   }
   const topClienti = [...mappaCliente.entries()]
-    .map(([id, v]) => ({ nome: nomiClienti[id] ?? 'Cliente', ...v }))
+    .map(([id, v]) => ({ id, nome: nomiClienti[id] ?? 'Cliente', ...v }))
     .sort((a, b) => b.incassoCents - a.incassoCents)
     .slice(0, 8);
 
