@@ -56,10 +56,17 @@ export function useSalone() {
 export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [copiato, setCopiato] = useState(false);
 
   async function esci() {
     await getSupabaseBrowserClient().auth.signOut();
     router.replace('/admin/login');
+  }
+
+  async function copiaLinkWidget() {
+    await navigator.clipboard.writeText(`${window.location.origin}/${salone.slug}`);
+    setCopiato(true);
+    setTimeout(() => setCopiato(false), 2000);
   }
 
   const sezioni = [
@@ -83,9 +90,18 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">{salone.name}</h1>
         </div>
-        <button onClick={esci} className="text-sm text-terracotta hover:underline">
-          Esci
-        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          <button
+            onClick={copiaLinkWidget}
+            title="Copia il link pubblico di prenotazione"
+            className="text-sm text-terracotta hover:underline"
+          >
+            {copiato ? 'Copiato ✓' : 'Copia link prenotazioni'}
+          </button>
+          <button onClick={esci} className="text-sm text-terracotta hover:underline">
+            Esci
+          </button>
+        </div>
       </div>
       <nav className="mt-4 flex gap-2">
         {sezioni.map((s) => {

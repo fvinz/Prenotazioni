@@ -1,6 +1,7 @@
 // Pagina pubblica di prenotazione del salone: /{tenantSlug}.
 // Server component sottile: carica i dati pubblici (RLS) e li passa al
 // widget client. Tutta l'interazione vive in widget.tsx.
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { WidgetPrenotazione, type DatiSalone } from './widget';
@@ -65,7 +66,9 @@ export default async function PaginaSalone({
         <h1 className="mt-4 font-display text-4xl tracking-tight">{tenant.name}</h1>
         <p className="mt-1 text-sm text-inchiostro/60">Prenota il tuo appuntamento.</p>
       </header>
-      <WidgetPrenotazione dati={dati} />
+      <Suspense fallback={<p className="text-center text-inchiostro/60">Un attimo…</p>}>
+        <WidgetPrenotazione dati={dati} />
+      </Suspense>
     </main>
   );
 }

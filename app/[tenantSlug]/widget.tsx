@@ -6,6 +6,8 @@
 // La voce del brand: frasi brevi, dirette, zero gergo tecnico.
 
 import { useEffect, useReducer, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { DateTime } from 'luxon';
 import type { FreeSlot } from '@/lib/slots';
 import {
   giorniPrenotabili,
@@ -29,6 +31,7 @@ interface Stato {
   operatoreId?: string;
   giorno?: GiornoPrenotabile;
   slot?: FreeSlot;
+  managementToken?: string;
 }
 
 type Azione =
@@ -36,7 +39,7 @@ type Azione =
   | { tipo: 'scegliOperatore'; operatoreId: string }
   | { tipo: 'scegliGiorno'; giorno: GiornoPrenotabile }
   | { tipo: 'scegliSlot'; slot: FreeSlot }
-  | { tipo: 'confermato' }
+  | { tipo: 'confermato'; managementToken?: string }
   | { tipo: 'indietro' }
   | { tipo: 'slotConteso' };
 
@@ -55,7 +58,7 @@ function riduci(stato: Stato, azione: Azione): Stato {
     case 'scegliSlot':
       return { ...stato, passo: 'dati', slot: azione.slot };
     case 'confermato':
-      return { ...stato, passo: 'fatto' };
+      return { ...stato, passo: 'fatto', managementToken: azione.managementToken };
     case 'slotConteso':
       return { ...stato, passo: 'quando', slot: undefined };
     case 'indietro':
@@ -75,8 +78,48 @@ function riduci(stato: Stato, azione: Azione): Stato {
 const euro = (cents: number) =>
   (cents / 100).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
 
+// Collegamento pre-compilato (es. dopo un annullamento, per proporre nuovi
+// orari): ?servizio=<id>&operatore=<id>&giorno=YYYY-MM-DD&suggeriti=iso,iso.
+// Se servizio/operatore non sono coerenti con i dati del salone, si ignora
+// e si parte dal primo passo come sempre.
+function statoDaIndirizzo(dati: DatiSalone, parametri: URLSearchParams): Stato {
+  const servizioId = parametri.get('servizio');
+  const operatoreId = parametri.get('operatore');
+  if (!servizioId || !operatoreId) return { passo: 'servizio' };
+  const servizioValido = dati.servizi.some((s) => s.id === servizioId);
+  const coppiaValida = dati.operatoreServizi.some(
+    (os) => os.service_id === servizioId && os.operator_id === operatoreId,
+  );
+  if (!servizioValido || !coppiaValida) return { passo: 'servizio' };
+  return { passo: 'quando', servizioId, operatoreId };
+}
+
 export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
-  const [stato, dispatch] = useReducer(riduci, { passo: 'servizio' });
+  const parametri = useSearchParams();
+  const [stato, dispatch] = useReducer(riduci, undefined, () => statoDaIndirizzo(dati, parametri));
+  const [suggeriti] = useState(() => new Set(parametri.get('suggeriti')?.split(',').filter(Boolean) ?? []));
+
+  // Se l'indirizzo indica anche un giorno, lo selezioniamo subito: il
+  // cliente vede già gli orari suggeriti, invece di dover ricliccare la
+  // striscia dei giorni. Fatto in un effetto (non nell'inizializzazione
+  // dello stato) perché il "giorno" della UI incorpora un'etichetta e un
+  // controllo di validità che vale la pena calcolare una sola volta.
+  useEffect(() => {
+    const giornoParam = parametri.get('giorno');
+    if (!giornoParam) return;
+    const g = DateTime.fromISO(giornoParam, { zone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    if (!g.isValid) return;
+    dispatch({
+      tipo: 'scegliGiorno',
+      giorno: {
+        data: giornoParam,
+        weekday: g.weekday % 7,
+        etichetta: g.setLocale('it').toFormat('ccc d LLLL'),
+        disponibile: true,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const servizio = dati.servizi.find((s) => s.id === stato.servizioId);
   const operatore = dati.operatori.find((o) => o.id === stato.operatoreId);
@@ -163,6 +206,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
               operatorId={stato.operatoreId}
               serviceId={stato.servizioId}
               data={stato.giorno.data}
+              suggeriti={suggeriti}
               onScegli={(slot) => dispatch({ tipo: 'scegliSlot', slot })}
             />
           )}
@@ -177,7 +221,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             operatorId={stato.operatoreId}
             serviceId={stato.servizioId}
             slot={stato.slot}
-            onConfermato={() => dispatch({ tipo: 'confermato' })}
+            onConfermato={(managementToken) => dispatch({ tipo: 'confermato', managementToken })}
             onSlotConteso={() => dispatch({ tipo: 'slotConteso' })}
           />
         </Sezione>
@@ -193,6 +237,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             {operatore ? ` con ${operatore.name}` : ''}.
           </p>
           <p className="mt-1 text-sm text-crema/60">Ti aspettiamo.</p>
+          {stato.managementToken && <LinkGestione token={stato.managementToken} />}
         </div>
       )}
     </div>
@@ -229,7 +274,8 @@ function Riepilogo(props: {
   );
 }
 
-function StrisciaGiorni(props: {
+// Esportati: riusati anche in /prenotazione/[token] per il cambio orario.
+export function StrisciaGiorni(props: {
   horizonDays: number;
   weekdayDisponibili: number[];
   selezionato?: string;
@@ -269,11 +315,13 @@ function StrisciaGiorni(props: {
   );
 }
 
-function SceltaOrario(props: {
+export function SceltaOrario(props: {
   tenantSlug: string;
   operatorId: string;
   serviceId: string;
   data: string;
+  /** Orari (ISO) che il salone ha proposto: evidenziati nella griglia. */
+  suggeriti?: Set<string>;
   onScegli: (slot: FreeSlot) => void;
 }) {
   const [slots, setSlots] = useState<FreeSlot[] | null>(null);
@@ -314,15 +362,27 @@ function SceltaOrario(props: {
       <div>
         <p className="mb-1 text-xs uppercase tracking-wide text-inchiostro/50">{titolo}</p>
         <div className="grid grid-cols-4 gap-2">
-          {lista.map((slot) => (
-            <button
-              key={slot.start}
-              onClick={() => props.onScegli(slot)}
-              className="rounded-xl border border-sabbia bg-white/60 py-2 font-mono text-sm transition hover:border-terracotta"
-            >
-              {slot.label}
-            </button>
-          ))}
+          {lista.map((slot) => {
+            const consigliato = props.suggeriti?.has(slot.start);
+            return (
+              <button
+                key={slot.start}
+                onClick={() => props.onScegli(slot)}
+                className={`relative rounded-xl border py-2 font-mono text-sm transition ${
+                  consigliato
+                    ? 'border-terracotta bg-terracotta/10 font-medium'
+                    : 'border-sabbia bg-white/60 hover:border-terracotta'
+                }`}
+              >
+                {consigliato && (
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-terracotta px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-crema">
+                    Consigliato
+                  </span>
+                )}
+                {slot.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -364,7 +424,7 @@ function FormDati(props: {
   operatorId: string;
   serviceId: string;
   slot: FreeSlot;
-  onConfermato: () => void;
+  onConfermato: (managementToken?: string) => void;
   onSlotConteso: () => void;
 }) {
   const [invio, setInvio] = useState(false);
@@ -393,7 +453,8 @@ function FormDati(props: {
         }),
       });
       if (res.ok) {
-        props.onConfermato();
+        const json = await res.json().catch(() => ({}));
+        props.onConfermato(json.managementToken);
         return;
       }
       const json = await res.json().catch(() => ({}));
@@ -462,5 +523,30 @@ function FormDati(props: {
         l’appuntamento.
       </p>
     </form>
+  );
+}
+
+function LinkGestione({ token }: { token: string }) {
+  const [copiato, setCopiato] = useState(false);
+  const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/prenotazione/${token}`;
+
+  async function copia() {
+    await navigator.clipboard.writeText(link);
+    setCopiato(true);
+    setTimeout(() => setCopiato(false), 2000);
+  }
+
+  return (
+    <div className="mt-4 border-t border-crema/20 pt-4">
+      <p className="text-xs text-crema/60">
+        Vuoi annullare o cambiare orario? Salva questo link:
+      </p>
+      <button
+        onClick={copia}
+        className="mt-1.5 w-full rounded-xl border border-crema/30 py-2 text-sm font-medium transition hover:bg-crema/10"
+      >
+        {copiato ? 'Copiato ✓' : 'Copia il link della prenotazione'}
+      </button>
+    </div>
   );
 }

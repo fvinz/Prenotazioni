@@ -57,7 +57,7 @@ export async function POST(request: Request) {
   }
 
   const supabase = getSupabaseServerClient();
-  const { data: bookingId, error } = await supabase.rpc('create_booking', {
+  const { data, error } = await supabase.rpc('create_booking', {
     p_tenant_slug: tenantSlug,
     p_operator_id: operatorId,
     p_service_id: serviceId,
@@ -78,5 +78,12 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, bookingId });
+  // create_booking restituisce una riga (booking_id, management_token):
+  // il gettone serve al cliente per il link "gestisci la tua prenotazione".
+  const riga = (data as { booking_id: string; management_token: string }[] | null)?.[0];
+  return NextResponse.json({
+    ok: true,
+    bookingId: riga?.booking_id,
+    managementToken: riga?.management_token,
+  });
 }
