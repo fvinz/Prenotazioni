@@ -50,6 +50,8 @@ export interface MetricheInput {
   nomiClienti: Record<string, string>;
   /** id cliente -> data di creazione ISO, per "nuovi vs di ritorno". */
   clientiCreatoIl?: Record<string, string>;
+  /** id cliente -> telefono E.164, per il richiamo via WhatsApp. */
+  telefoniClienti?: Record<string, string>;
 }
 
 export interface MetricheOperatore {
@@ -79,7 +81,7 @@ export interface Metriche {
   nuoviClienti: number;
   clientiRitorno: number;
   /** Occupazione media 0..1 per giorno della settimana, lun..dom. */
-  perGiorno: { weekday: number; nome: string; occupazione: number }[];
+  perGiorno: { weekday: number; nome: string; occupazione: number; aperto: boolean }[];
   /** Volume di appuntamenti per ora d'inizio (ore di punta). */
   perFasciaOraria: { ora: number; n: number }[];
   /** Canale di prenotazione: Widget / Manuale / Altro. */
@@ -89,7 +91,14 @@ export interface Metriche {
   perOperatore: MetricheOperatore[];
   topClienti: { id: string; nome: string; incassoCents: number; n: number }[];
   /** Clienti abituali che non tornano da >= 60 giorni. */
-  clientiDaRecuperare: { id: string; nome: string; giorni: number; n: number; valoreCents: number }[];
+  clientiDaRecuperare: {
+    id: string;
+    nome: string;
+    telefono: string | null;
+    giorni: number;
+    n: number;
+    valoreCents: number;
+  }[];
   /** Clienti con alto tasso di no-show (candidati all'acconto). */
   clientiInaffidabili: { id: string; nome: string; tassoNoShow: number; n: number }[];
 }
@@ -100,6 +109,7 @@ const durataMin = (b: Prenotazione) =>
 
 export function calcolaMetriche(input: MetricheInput): Metriche {
   const { from, to, timezone, bookings, operatori, servizi, disponibilita, nomiClienti } = input;
+  const telefoniClienti = input.telefoniClienti ?? {};
 
   const inizio = DateTime.fromISO(from, { zone: timezone }).startOf('day');
   const fine = DateTime.fromISO(to, { zone: timezone }).startOf('day');
@@ -144,6 +154,9 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
       weekday: wd,
       nome: NOMI_GIORNI[wd],
       occupazione: disp > 0 ? occupatoGiorno[wd] / disp : 0,
+      // Nessuna fascia di disponibilità in nessuna settimana del periodo:
+      // giorno chiuso di proposito, da non confondere con "vuoto per caso".
+      aperto: finestraGiorno[wd] > 0,
     };
   });
 
@@ -265,6 +278,7 @@ export function calcolaMetriche(input: MetricheInput): Metriche {
     .map(([id, a]) => ({
       id,
       nome: nomiClienti[id] ?? 'Cliente',
+      telefono: telefoniClienti[id] ?? null,
       giorni: Math.floor(ora.diff(DateTime.fromMillis(a.ultimo), 'days').days),
       n: a.completati,
       valoreCents: a.valore,

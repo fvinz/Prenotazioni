@@ -10,7 +10,11 @@ import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { calcolaMetriche, type Metriche, type Prenotazione } from '@/lib/metriche';
+import { generaConsigli, type Consiglio } from '@/lib/consigli';
 import { Intestazione, useSalone } from '../comuni';
+
+// Quanto resta silenziato un consiglio ignorato prima di poter ricomparire.
+const GIORNI_IGNORA = 30;
 
 type Periodo = 'mese' | 'trimestre' | 'anno';
 const GIORNI_PERIODO: Record<Periodo, number> = { mese: 30, trimestre: 90, anno: 365 };
@@ -35,7 +39,53 @@ export default function MetricheAdmin() {
 
   const [periodo, setPeriodo] = useState<Periodo>('anno');
   const [dati, setDati] = useState<Metriche | null>(null);
+  const [precedente, setPrecedente] = useState<Metriche | null>(null);
+  const [consigli, setConsigli] = useState<Consiglio[]>([]);
   const [erroreDati, setErroreDati] = useState<string | null>(null);
+
+  // Prenotazioni di un intervallo [dallIso, aIso), a pagine (superano il
+  // limite di 1000 righe di una singola richiesta).
+  const caricaPrenotazioni = useCallback(
+    async (tenantId: string, dallIso: string, aIso?: string): Promise<Prenotazione[] | null> => {
+      const bookings: Prenotazione[] = [];
+      const PAGINA = 1000;
+      for (let inizio = 0; ; inizio += PAGINA) {
+        let query = supabase
+          .from('bookings')
+          .select('operator_id, service_id, customer_id, starts_at, ends_at, status, price_cents, source')
+          .eq('tenant_id', tenantId)
+          .gte('starts_at', dallIso);
+        if (aIso) query = query.lt('starts_at', aIso);
+        const { data: rows, error } = await query.order('starts_at').range(inizio, inizio + PAGINA - 1);
+        if (error) return null;
+        const blocco = (rows ?? []) as unknown as {
+          operator_id: string;
+          service_id: string;
+          customer_id: string;
+          starts_at: string;
+          ends_at: string;
+          status: Prenotazione['status'];
+          price_cents: number;
+          source: string;
+        }[];
+        bookings.push(
+          ...blocco.map((b) => ({
+            operatorId: b.operator_id,
+            serviceId: b.service_id,
+            customerId: b.customer_id,
+            startsAt: b.starts_at,
+            endsAt: b.ends_at,
+            status: b.status,
+            priceCents: b.price_cents,
+            source: b.source,
+          })),
+        );
+        if (blocco.length < PAGINA) break;
+      }
+      return bookings;
+    },
+    [supabase],
+  );
 
   const carica = useCallback(async () => {
     if (!salone || ruolo !== 'owner') return;
@@ -44,85 +94,114 @@ export default function MetricheAdmin() {
 
     const oggi = DateTime.now().setZone(salone.timezone).startOf('day');
     const from = oggi.minus({ days: GIORNI_PERIODO[periodo] });
-    const dallIso = from.toUTC().toISO()!;
+    const precInizio = from.minus({ days: GIORNI_PERIODO[periodo] });
 
-    // Prenotazioni del periodo, a pagine (superano il limite di 1000 righe).
-    const bookings: Prenotazione[] = [];
-    const PAGINA = 1000;
-    for (let inizio = 0; ; inizio += PAGINA) {
-      const { data: rows, error } = await supabase
-        .from('bookings')
-        .select('operator_id, service_id, customer_id, starts_at, ends_at, status, price_cents, source')
-        .eq('tenant_id', salone.id)
-        .gte('starts_at', dallIso)
-        .order('starts_at')
-        .range(inizio, inizio + PAGINA - 1);
-      if (error) {
-        setErroreDati('Non riesco a caricare le metriche. Riprova.');
-        return;
-      }
-      const blocco = (rows ?? []) as unknown as {
-        operator_id: string;
-        service_id: string;
-        customer_id: string;
-        starts_at: string;
-        ends_at: string;
-        status: Prenotazione['status'];
-        price_cents: number;
-        source: string;
-      }[];
-      bookings.push(
-        ...blocco.map((b) => ({
-          operatorId: b.operator_id,
-          serviceId: b.service_id,
-          customerId: b.customer_id,
-          startsAt: b.starts_at,
-          endsAt: b.ends_at,
-          status: b.status,
-          priceCents: b.price_cents,
-          source: b.source,
-        })),
-      );
-      if (blocco.length < PAGINA) break;
+    const [bookingsCorrente, bookingsPrecedente, opsRes, svcRes, avRes, custRes, ignoratiRes] =
+      await Promise.all([
+        caricaPrenotazioni(salone.id, from.toUTC().toISO()!),
+        caricaPrenotazioni(salone.id, precInizio.toUTC().toISO()!, from.toUTC().toISO()!),
+        supabase.from('operators').select('id, name').eq('tenant_id', salone.id).order('name'),
+        supabase.from('services').select('id, name').eq('tenant_id', salone.id),
+        supabase.from('availability').select('operator_id, weekday, start_time, end_time').eq('tenant_id', salone.id),
+        supabase.from('customers').select('id, first_name, last_name, phone, created_at').eq('tenant_id', salone.id),
+        supabase
+          .from('consigli_ignorati')
+          .select('identificativo')
+          .eq('tenant_id', salone.id)
+          .gt('ignorato_fino', DateTime.utc().toISO()),
+      ]);
+
+    if (bookingsCorrente === null || bookingsPrecedente === null) {
+      setErroreDati('Non riesco a caricare le metriche. Riprova.');
+      return;
     }
-
-    const [opsRes, svcRes, avRes, custRes] = await Promise.all([
-      supabase.from('operators').select('id, name').eq('tenant_id', salone.id).order('name'),
-      supabase.from('services').select('id, name').eq('tenant_id', salone.id),
-      supabase.from('availability').select('operator_id, weekday, start_time, end_time').eq('tenant_id', salone.id),
-      supabase.from('customers').select('id, first_name, last_name, created_at').eq('tenant_id', salone.id),
-    ]);
 
     const nomiClienti: Record<string, string> = {};
     const clientiCreatoIl: Record<string, string> = {};
+    const telefoniClienti: Record<string, string> = {};
     for (const c of custRes.data ?? []) {
       nomiClienti[c.id] = `${c.first_name} ${c.last_name ?? ''}`.trim();
       clientiCreatoIl[c.id] = c.created_at;
+      if (c.phone) telefoniClienti[c.id] = c.phone;
     }
 
-    setDati(
-      calcolaMetriche({
-        from: from.toISODate()!,
-        to: oggi.toISODate()!,
-        timezone: salone.timezone,
-        bookings,
-        operatori: opsRes.data ?? [],
-        servizi: svcRes.data ?? [],
-        disponibilita: (avRes.data ?? []).map((a) => ({
-          operatorId: a.operator_id,
-          weekday: a.weekday,
-          startMin: minutiDaOra(String(a.start_time)),
-          endMin: minutiDaOra(String(a.end_time)),
-        })),
-        nomiClienti,
-        clientiCreatoIl,
+    const operatori = opsRes.data ?? [];
+    const servizi = svcRes.data ?? [];
+    const disponibilita = (avRes.data ?? []).map((a) => ({
+      operatorId: a.operator_id,
+      weekday: a.weekday,
+      startMin: minutiDaOra(String(a.start_time)),
+      endMin: minutiDaOra(String(a.end_time)),
+    }));
+
+    const metricheCorrente = calcolaMetriche({
+      from: from.toISODate()!,
+      to: oggi.toISODate()!,
+      timezone: salone.timezone,
+      bookings: bookingsCorrente,
+      operatori,
+      servizi,
+      disponibilita,
+      nomiClienti,
+      clientiCreatoIl,
+      telefoniClienti,
+    });
+    const metrichePrecedente = calcolaMetriche({
+      from: precInizio.toISODate()!,
+      to: from.minus({ days: 1 }).toISODate()!,
+      timezone: salone.timezone,
+      bookings: bookingsPrecedente,
+      operatori,
+      servizi,
+      disponibilita,
+      nomiClienti,
+      clientiCreatoIl,
+      telefoniClienti,
+    });
+
+    setDati(metricheCorrente);
+    setPrecedente(metrichePrecedente);
+
+    const ignorati = new Set((ignoratiRes.data ?? []).map((r) => r.identificativo as string));
+    setConsigli(
+      generaConsigli({
+        corrente: metricheCorrente,
+        precedente: metrichePrecedente,
+        ignorati,
+        hrefRecupero: '/admin/metriche#da-recuperare',
+        urlWidget: `${window.location.origin}/${salone.slug}`,
       }),
     );
-  }, [supabase, salone, ruolo, periodo]);
+  }, [supabase, salone, ruolo, periodo, caricaPrenotazioni]);
 
   useEffect(() => {
     carica();
   }, [carica]);
+
+  async function ignoraConsiglio(id: string) {
+    if (!salone) return;
+    setConsigli((prev) => prev.filter((c) => c.id !== id));
+    await supabase.from('consigli_ignorati').upsert(
+      {
+        tenant_id: salone.id,
+        identificativo: id,
+        ignorato_fino: DateTime.utc().plus({ days: GIORNI_IGNORA }).toISO(),
+      },
+      { onConflict: 'tenant_id,identificativo' },
+    );
+  }
+
+  async function applicaPrezzo(consiglioId: string, servizioId: string, nuovoCents: number): Promise<boolean> {
+    if (!salone) return false;
+    const { error } = await supabase.from('services').update({ price_cents: nuovoCents }).eq('id', servizioId);
+    if (error) return false;
+    // Il prezzo cambia da ora in poi: i dati del periodo restano quelli
+    // registrati, quindi il consiglio non si spegnerebbe da solo. Lo
+    // silenziamo esplicitamente, come un "fatto".
+    await ignoraConsiglio(consiglioId);
+    carica();
+    return true;
+  }
 
   if (errore) {
     return (
@@ -173,6 +252,29 @@ export default function MetricheAdmin() {
         </p>
       ) : (
         <div className="space-y-8">
+          {/* Consigli per te */}
+          {consigli.length > 0 && (
+            <section>
+              <h2 className="font-display text-xl">Consigli per te</h2>
+              <p className="mb-3 text-sm text-inchiostro/50">
+                Letture dei tuoi numeri, non regole fisse: ignora quelli che non ti servono.
+              </p>
+              <div className="space-y-2">
+                {consigli.map((c) => (
+                  <ConsiglioCard
+                    key={c.id}
+                    consiglio={c}
+                    onIgnora={() => ignoraConsiglio(c.id)}
+                    onApplicaPrezzo={(nuovoCents) => {
+                      if (c.azione?.kind !== 'modifica_prezzo') return Promise.resolve(false);
+                      return applicaPrezzo(c.id, c.azione.servizioId, nuovoCents);
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Sintesi */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Riquadro etichetta="Incasso" valore={euro(dati.incassoCents)} />
@@ -228,7 +330,7 @@ export default function MetricheAdmin() {
           </Sezione>
 
           {/* Per operatore */}
-          <Sezione titolo="Per operatore" sottotitolo="Impiego, incasso e redditività.">
+          <Sezione id="per-operatore" titolo="Per operatore" sottotitolo="Impiego, incasso e redditività.">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -295,6 +397,7 @@ export default function MetricheAdmin() {
           {/* Clienti da recuperare */}
           {dati.clientiDaRecuperare.length > 0 && (
             <Sezione
+              id="da-recuperare"
               titolo="Da recuperare"
               sottotitolo="Clienti abituali che non tornano da un po'."
             >
@@ -303,6 +406,12 @@ export default function MetricheAdmin() {
                   id: c.id,
                   nome: c.nome,
                   destra: `${c.giorni} gg fa · ${euro(c.valoreCents)} spesi`,
+                  whatsapp: c.telefono
+                    ? {
+                        telefono: c.telefono,
+                        messaggio: `Ciao ${c.nome}, è da un po' che non ti vediamo da ${salone.name}! Se vuoi prenotare un appuntamento siamo qui.`,
+                      }
+                    : undefined,
                 }))}
               />
             </Sezione>
@@ -340,16 +449,18 @@ function Riquadro({ etichetta, valore, accento }: { etichetta: string; valore: s
 }
 
 function Sezione({
+  id,
   titolo,
   sottotitolo,
   children,
 }: {
+  id?: string;
   titolo: string;
   sottotitolo: string;
   children: React.ReactNode;
 }) {
   return (
-    <section>
+    <section id={id} className={id ? 'scroll-mt-4' : undefined}>
       <h2 className="font-display text-xl">{titolo}</h2>
       <p className="mb-3 text-sm text-inchiostro/50">{sottotitolo}</p>
       {children}
@@ -420,36 +531,184 @@ function BarreMensili({
 }
 
 // Elenco cliente + valore a destra (usato da più sezioni). Il nome
-// collega alla scheda del cliente quando è disponibile il suo id.
+// collega alla scheda del cliente quando è disponibile il suo id; un
+// numero di telefono aggiunge un collegamento WhatsApp pronto.
 function ElencoClienti({
   voci,
 }: {
-  voci: { id?: string; nome: string; destra: string; accento?: boolean }[];
+  voci: {
+    id?: string;
+    nome: string;
+    destra: string;
+    accento?: boolean;
+    whatsapp?: { telefono: string; messaggio: string };
+  }[];
 }) {
   return (
     <ul className="space-y-1.5">
       {voci.map((v, i) => (
         <li
           key={i}
-          className="flex items-baseline justify-between border-b border-sabbia/60 py-1.5 text-sm"
+          className="flex items-baseline justify-between gap-2 border-b border-sabbia/60 py-1.5 text-sm"
         >
-          {v.id ? (
-            <Link
-              href={`/admin/clienti/${v.id}`}
-              className="truncate text-terracotta hover:underline"
-            >
-              {v.nome}
-            </Link>
-          ) : (
-            <span className="truncate">{v.nome}</span>
-          )}
+          <span className="flex min-w-0 items-baseline gap-2">
+            {v.id ? (
+              <Link
+                href={`/admin/clienti/${v.id}`}
+                className="truncate text-terracotta hover:underline"
+              >
+                {v.nome}
+              </Link>
+            ) : (
+              <span className="truncate">{v.nome}</span>
+            )}
+            {v.whatsapp && (
+              <a
+                href={`https://wa.me/${v.whatsapp.telefono.replace(/\D/g, '')}?text=${encodeURIComponent(v.whatsapp.messaggio)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-xs text-inchiostro/50 hover:text-terracotta hover:underline"
+              >
+                WhatsApp
+              </a>
+            )}
+          </span>
           <span
-            className={`ml-3 shrink-0 tabular-nums ${v.accento ? 'text-terracotta' : 'text-inchiostro/70'}`}
+            className={`shrink-0 tabular-nums ${v.accento ? 'text-terracotta' : 'text-inchiostro/70'}`}
           >
             {v.destra}
           </span>
         </li>
       ))}
     </ul>
+  );
+}
+
+// Scheda di un consiglio: tipo, testo, l'azione rapida quando esiste, e
+// un modo per ignorarlo (silenziato per un periodo prima di ricomparire).
+function ConsiglioCard({
+  consiglio,
+  onIgnora,
+  onApplicaPrezzo,
+}: {
+  consiglio: Consiglio;
+  onIgnora: () => void;
+  onApplicaPrezzo: (nuovoCents: number) => Promise<boolean>;
+}) {
+  const [modificaPrezzo, setModificaPrezzo] = useState(false);
+  const [copiato, setCopiato] = useState(false);
+  const [invio, setInvio] = useState(false);
+  // Estratto in una costante: il restringimento di tipo su 'kind' non
+  // attraversa gli accessi ripetuti a una proprietà opzionale dentro le
+  // funzioni di callback, ma su una variabile locale sì.
+  const azione = consiglio.azione;
+
+  const bordo =
+    consiglio.tipo === 'attenzione'
+      ? 'border-terracotta/60'
+      : consiglio.tipo === 'positivo'
+        ? 'border-sabbia'
+        : 'border-inchiostro/15';
+
+  async function copia(testo: string) {
+    await navigator.clipboard.writeText(testo);
+    setCopiato(true);
+    setTimeout(() => setCopiato(false), 2000);
+  }
+
+  async function salvaPrezzo(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (consiglio.azione?.kind !== 'modifica_prezzo') return;
+    const form = new FormData(e.currentTarget);
+    const euroInput = Number(String(form.get('prezzo')).replace(',', '.'));
+    if (!euroInput || euroInput <= 0) return;
+    setInvio(true);
+    const ok = await onApplicaPrezzo(Math.round(euroInput * 100));
+    setInvio(false);
+    if (ok) setModificaPrezzo(false);
+  }
+
+  return (
+    <div className={`rounded-xl border bg-white/60 px-4 py-3 ${bordo}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium">{consiglio.titolo}</p>
+          <p className="mt-0.5 text-sm text-inchiostro/70">{consiglio.testo}</p>
+        </div>
+        <button
+          onClick={onIgnora}
+          aria-label="Ignora questo consiglio"
+          title="Ignora per un mese"
+          className="shrink-0 text-inchiostro/40 hover:text-terracotta"
+        >
+          ×
+        </button>
+      </div>
+
+      {azione && !modificaPrezzo && (
+        <div className="mt-2">
+          {azione.kind === 'naviga' && (
+            <Link href={azione.href} className="text-sm font-medium text-terracotta hover:underline">
+              {azione.etichetta} →
+            </Link>
+          )}
+          {azione.kind === 'whatsapp' && (
+            <a
+              href={`https://wa.me/${azione.telefono.replace(/\D/g, '')}?text=${encodeURIComponent(azione.messaggio)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-terracotta hover:underline"
+            >
+              {azione.etichetta} →
+            </a>
+          )}
+          {azione.kind === 'copia' && (
+            <button
+              onClick={() => copia(azione.testo)}
+              className="text-sm font-medium text-terracotta hover:underline"
+            >
+              {copiato ? 'Copiato ✓' : azione.etichetta}
+            </button>
+          )}
+          {azione.kind === 'modifica_prezzo' && (
+            <button
+              onClick={() => setModificaPrezzo(true)}
+              className="text-sm font-medium text-terracotta hover:underline"
+            >
+              {azione.etichetta} →
+            </button>
+          )}
+        </div>
+      )}
+
+      {azione?.kind === 'modifica_prezzo' && modificaPrezzo && (
+        <form onSubmit={salvaPrezzo} className="mt-2 flex items-center gap-2">
+          <span className="text-sm text-inchiostro/60">Nuovo prezzo di {azione.servizioNome}:</span>
+          <input
+            name="prezzo"
+            type="number"
+            min={0}
+            step="0.5"
+            defaultValue={azione.prezzoSuggeritoCents / 100}
+            className="w-24 rounded-lg border border-sabbia bg-white/80 px-2 py-1 text-sm"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={invio}
+            className="rounded-lg bg-terracotta px-3 py-1 text-sm font-medium text-crema disabled:opacity-60"
+          >
+            Salva
+          </button>
+          <button
+            type="button"
+            onClick={() => setModificaPrezzo(false)}
+            className="text-sm text-inchiostro/50 hover:underline"
+          >
+            Annulla
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
