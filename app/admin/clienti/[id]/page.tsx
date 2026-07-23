@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
+import { calcolaStatCliente, type Prenotazione, type StatCliente } from '@/lib/metriche';
 import { Intestazione, useSalone } from '../../comuni';
 
 interface Cliente {
@@ -23,7 +24,10 @@ interface Cliente {
 
 interface Appuntamento {
   id: string;
+  operator_id: string;
+  service_id: string;
   starts_at: string;
+  ends_at: string;
   status: string;
   price_cents: number;
   services: { name: string } | null;
@@ -47,12 +51,13 @@ export default function SchedaCliente() {
 
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [storico, setStorico] = useState<Appuntamento[] | null>(null);
+  const [stat, setStat] = useState<StatCliente | null>(null);
   const [note, setNote] = useState('');
   const [salvataggio, setSalvataggio] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const carica = useCallback(async () => {
     if (!salone) return;
-    const [clienteRes, storicoRes] = await Promise.all([
+    const [clienteRes, storicoRes, opsRes, svcRes] = await Promise.all([
       supabase
         .from('customers')
         .select('id, first_name, last_name, phone, email, notes, created_at')
@@ -60,14 +65,35 @@ export default function SchedaCliente() {
         .maybeSingle(),
       supabase
         .from('bookings')
-        .select('id, starts_at, status, price_cents, services(name), operators(name)')
+        .select('id, operator_id, service_id, starts_at, ends_at, status, price_cents, services(name), operators(name)')
         .eq('customer_id', id)
         .order('starts_at', { ascending: false })
-        .limit(50),
+        .limit(500),
+      supabase.from('operators').select('id, name').eq('tenant_id', salone.id),
+      supabase.from('services').select('id, name').eq('tenant_id', salone.id),
     ]);
     setCliente((clienteRes.data ?? null) as Cliente | null);
     setNote(clienteRes.data?.notes ?? '');
-    setStorico((storicoRes.data ?? []) as unknown as Appuntamento[]);
+    const righe = (storicoRes.data ?? []) as unknown as Appuntamento[];
+    setStorico(righe);
+    setStat(
+      calcolaStatCliente({
+        now: DateTime.now().toISO()!,
+        operatori: opsRes.data ?? [],
+        servizi: svcRes.data ?? [],
+        bookings: righe.map(
+          (b): Prenotazione => ({
+            operatorId: b.operator_id,
+            serviceId: b.service_id,
+            customerId: id,
+            startsAt: b.starts_at,
+            endsAt: b.ends_at,
+            status: b.status as Prenotazione['status'],
+            priceCents: b.price_cents,
+          }),
+        ),
+      }),
+    );
   }, [supabase, salone, id]);
 
   useEffect(() => {
@@ -138,7 +164,42 @@ export default function SchedaCliente() {
         </p>
       </div>
 
-      <section className="mt-4">
+      {stat && stat.nCompletati > 0 && (
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Stat etichetta="Valore totale" valore={euro(stat.valoreTotaleCents)} />
+          <Stat etichetta="Scontrino medio" valore={euro(stat.scontrinoMedioCents)} />
+          <Stat etichetta="Appuntamenti" valore={String(stat.nCompletati)} />
+          <Stat
+            etichetta="No-show"
+            valore={`${Math.round(stat.tassoNoShow * 100)}%`}
+            accento={stat.tassoNoShow >= 0.25}
+          />
+          <Stat etichetta="Operatore preferito" valore={stat.operatorePreferito ?? '—'} />
+          <Stat
+            etichetta="Torna in media"
+            valore={stat.frequenzaGiorni ? `ogni ${stat.frequenzaGiorni} gg` : '—'}
+          />
+          <Stat
+            etichetta="Ultimo appuntamento"
+            valore={stat.giorniDaUltimo !== null ? `${stat.giorniDaUltimo} gg fa` : '—'}
+          />
+          <Stat
+            etichetta="Servizi abituali"
+            valore={stat.serviziAbituali.slice(0, 2).map((s) => s.nome).join(', ') || '—'}
+          />
+          <Stat
+            etichetta="Prossimo"
+            valore={
+              stat.prossimoIso
+                ? DateTime.fromISO(stat.prossimoIso).setZone(salone.timezone).setLocale('it').toFormat('d LLL')
+                : 'nessuno'
+            }
+            accento={!!stat.prossimoIso}
+          />
+        </div>
+      )}
+
+      <section className="mt-6">
         <h3 className="mb-2 font-display text-xl">Note</h3>
         <textarea
           value={note}
@@ -215,5 +276,16 @@ export default function SchedaCliente() {
         )}
       </section>
     </main>
+  );
+}
+
+function Stat({ etichetta, valore, accento }: { etichetta: string; valore: string; accento?: boolean }) {
+  return (
+    <div className="rounded-xl border border-sabbia bg-white/60 px-3 py-2">
+      <p className="text-xs uppercase tracking-wide text-inchiostro/50">{etichetta}</p>
+      <p className={`mt-0.5 truncate font-medium ${accento ? 'text-terracotta' : ''}`} title={valore}>
+        {valore}
+      </p>
+    </div>
   );
 }

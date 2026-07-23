@@ -65,8 +65,13 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
   const sezioni = [
     { href: '/admin', label: 'Agenda' },
     { href: '/admin/clienti', label: 'Clienti' },
-    // La configurazione è del titolare (e il DB lo impone comunque).
-    ...(ruolo === 'owner' ? [{ href: '/admin/impostazioni', label: 'Impostazioni' }] : []),
+    // Metriche e configurazione sono del titolare (e il DB lo impone comunque).
+    ...(ruolo === 'owner'
+      ? [
+          { href: '/admin/metriche', label: 'Metriche' },
+          { href: '/admin/impostazioni', label: 'Impostazioni' },
+        ]
+      : []),
   ];
 
   return (
