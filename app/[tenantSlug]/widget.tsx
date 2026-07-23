@@ -94,10 +94,47 @@ function statoDaIndirizzo(dati: DatiSalone, parametri: URLSearchParams): Stato {
   return { passo: 'quando', servizioId, operatoreId };
 }
 
+interface DatiPrecompilati {
+  nome: string;
+  cognome: string;
+  prefisso: string;
+  telefono: string;
+  email: string;
+}
+
+// Divide un numero in E.164 (es. "+393331234567", già a sistema) nel
+// prefisso e nella parte locale che il form usa in due campi separati.
+function scindiTelefono(e164: string): { prefisso: string; locale: string } {
+  const corrispondenza = [...PREFISSI]
+    .sort((a, b) => b.code.length - a.code.length)
+    .find((p) => e164.startsWith(p.code));
+  if (!corrispondenza) return { prefisso: '+39', locale: e164 };
+  return { prefisso: corrispondenza.code, locale: e164.slice(corrispondenza.code.length).trim() };
+}
+
+// Dopo un annullamento del salone, il link di riproposta include anche
+// i dati del cliente già a sistema (sezione 3 del brief: nessuna
+// frizione in più per un semplice cambio orario). Restano campi normali
+// del form, che il cliente può comunque correggere.
+function precompilatoDaIndirizzo(parametri: URLSearchParams): DatiPrecompilati | undefined {
+  const nome = parametri.get('nome');
+  const telefono = parametri.get('telefono');
+  if (!nome || !telefono) return undefined;
+  const { prefisso, locale } = scindiTelefono(telefono);
+  return {
+    nome,
+    cognome: parametri.get('cognome') ?? '',
+    prefisso,
+    telefono: locale,
+    email: parametri.get('email') ?? '',
+  };
+}
+
 export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
   const parametri = useSearchParams();
   const [stato, dispatch] = useReducer(riduci, undefined, () => statoDaIndirizzo(dati, parametri));
   const [suggeriti] = useState(() => new Set(parametri.get('suggeriti')?.split(',').filter(Boolean) ?? []));
+  const [precompilato] = useState(() => precompilatoDaIndirizzo(parametri));
 
   // Se l'indirizzo indica anche un giorno, lo selezioniamo subito: il
   // cliente vede già gli orari suggeriti, invece di dover ricliccare la
@@ -221,6 +258,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             operatorId={stato.operatoreId}
             serviceId={stato.servizioId}
             slot={stato.slot}
+            precompilato={precompilato}
             onConfermato={(managementToken) => dispatch({ tipo: 'confermato', managementToken })}
             onSlotConteso={() => dispatch({ tipo: 'slotConteso' })}
           />
@@ -424,6 +462,7 @@ function FormDati(props: {
   operatorId: string;
   serviceId: string;
   slot: FreeSlot;
+  precompilato?: DatiPrecompilati;
   onConfermato: (managementToken?: string) => void;
   onSlotConteso: () => void;
 }) {
@@ -477,13 +516,25 @@ function FormDati(props: {
   return (
     <form onSubmit={invia} className="space-y-3">
       <div className="flex gap-3">
-        <input name="nome" required placeholder="Nome" className={campo} />
-        <input name="cognome" required placeholder="Cognome" className={campo} />
+        <input
+          name="nome"
+          required
+          placeholder="Nome"
+          defaultValue={props.precompilato?.nome}
+          className={campo}
+        />
+        <input
+          name="cognome"
+          required
+          placeholder="Cognome"
+          defaultValue={props.precompilato?.cognome}
+          className={campo}
+        />
       </div>
       <div className="flex gap-3">
         <select
           name="prefisso"
-          defaultValue="+39"
+          defaultValue={props.precompilato?.prefisso ?? '+39'}
           aria-label="Prefisso internazionale"
           className="shrink-0 rounded-xl border border-sabbia bg-white/60 px-3 py-3 font-mono text-sm outline-none transition focus:border-terracotta"
         >
@@ -498,10 +549,17 @@ function FormDati(props: {
           required
           type="tel"
           placeholder="Cellulare (es. 333 123 4567)"
+          defaultValue={props.precompilato?.telefono}
           className={campo}
         />
       </div>
-      <input name="email" type="email" placeholder="Email (facoltativa)" className={campo} />
+      <input
+        name="email"
+        type="email"
+        placeholder="Email (facoltativa)"
+        defaultValue={props.precompilato?.email}
+        className={campo}
+      />
       {/* Honeypot: invisibile agli umani, irresistibile per i bot. */}
       <input
         name="website"

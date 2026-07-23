@@ -27,7 +27,9 @@ export function ProponiAlternative(props: {
   servizioNome: string;
   operatoreId: string;
   clienteNome: string;
+  clienteCognome: string | null;
   clienteTelefono: string;
+  clienteEmail: string | null;
   vecchioInizio: string; // ISO dell'appuntamento annullato
   onChiudi: () => void;
 }) {
@@ -72,16 +74,24 @@ export function ProponiAlternative(props: {
     };
   }, [props.salone, props.operatoreId, props.servizioId]);
 
-  // Collegamento al widget: pre-compilato su servizio e operatore; se
-  // c'è almeno una proposta scelta, apre già il giorno della prima e
-  // evidenzia tutte quelle scelte come "Consigliato".
+  // Collegamento al widget: pre-compilato su servizio e operatore, e con
+  // i dati del cliente già a sistema (nome, telefono, email) così non
+  // deve reinserirli: il salone li conosce già, è solo un cambio orario
+  // dello stesso appuntamento. Restano comunque campi normali del form,
+  // modificabili dal cliente. Se c'è almeno una proposta scelta, il
+  // link apre già il giorno della prima e evidenzia tutte quelle scelte
+  // come "Consigliato".
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const link = useMemo(() => {
     const selezionate = (alternative ?? []).filter((a) => scelte.has(a.slot.start));
     const parametri = new URLSearchParams({
       servizio: props.servizioId,
       operatore: props.operatoreId,
+      nome: props.clienteNome,
+      telefono: props.clienteTelefono,
     });
+    if (props.clienteCognome) parametri.set('cognome', props.clienteCognome);
+    if (props.clienteEmail) parametri.set('email', props.clienteEmail);
     if (selezionate.length > 0) {
       const primoGiorno = DateTime.fromISO(selezionate[0].slot.start)
         .setZone(props.salone.timezone)
@@ -90,7 +100,18 @@ export function ProponiAlternative(props: {
       parametri.set('suggeriti', selezionate.map((a) => a.slot.start).join(','));
     }
     return `${origin}/${props.salone.slug}?${parametri.toString()}`;
-  }, [alternative, scelte, props.servizioId, props.operatoreId, props.salone, origin]);
+  }, [
+    alternative,
+    scelte,
+    props.servizioId,
+    props.operatoreId,
+    props.clienteNome,
+    props.clienteCognome,
+    props.clienteTelefono,
+    props.clienteEmail,
+    props.salone,
+    origin,
+  ]);
 
   const messaggio = useMemo(() => {
     const vecchio = DateTime.fromISO(props.vecchioInizio)

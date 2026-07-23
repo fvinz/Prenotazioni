@@ -25,7 +25,12 @@ interface Prenotazione {
   ends_at: string;
   status: string;
   services: { name: string } | null;
-  customers: { first_name: string; last_name: string | null; phone: string } | null;
+  customers: {
+    first_name: string;
+    last_name: string | null;
+    phone: string;
+    email: string | null;
+  } | null;
 }
 
 const STATO: Record<string, string> = {
@@ -65,7 +70,7 @@ export default function AgendaAdmin() {
     const { data: rows, error } = await supabase
       .from('bookings')
       .select(
-        'id, operator_id, service_id, starts_at, ends_at, status, services(name), customers(first_name, last_name, phone)',
+        'id, operator_id, service_id, starts_at, ends_at, status, services(name), customers(first_name, last_name, phone, email)',
       )
       .eq('tenant_id', salone.id)
       .gte('starts_at', inizio.toUTC().toISO()!)
@@ -235,7 +240,9 @@ export default function AgendaAdmin() {
           servizioNome={proposta.services?.name ?? 'Appuntamento'}
           operatoreId={proposta.operator_id}
           clienteNome={proposta.customers.first_name}
+          clienteCognome={proposta.customers.last_name}
           clienteTelefono={proposta.customers.phone}
+          clienteEmail={proposta.customers.email}
           vecchioInizio={proposta.starts_at}
           onChiudi={() => setProposta(null)}
         />
