@@ -22,6 +22,7 @@ interface RigaPrenotazione {
   service_price_cents: number;
   operator_id: string;
   operator_name: string;
+  modifica_entro: string | null;
 }
 
 export default async function PaginaGestionePrenotazione({
@@ -54,6 +55,7 @@ export default async function PaginaGestionePrenotazione({
     servizio: { id: riga.service_id, name: riga.service_name, priceCents: riga.service_price_cents },
     operatore: { id: riga.operator_id, name: riga.operator_name },
     weekdayDisponibili: (avRes ?? []).map((a) => a.weekday),
+    modificaEntro: riga.modifica_entro,
   };
 
   return (

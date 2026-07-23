@@ -595,15 +595,15 @@ function LinkGestione({ token }: { token: string }) {
   }
 
   return (
-    <div className="mt-4 border-t border-crema/20 pt-4">
-      <p className="text-xs text-crema/60">
-        Vuoi annullare o cambiare orario? Salva questo link:
+    <div className="mt-5 rounded-xl border-2 border-terracotta bg-terracotta/10 p-4">
+      <p className="text-sm font-semibold text-crema">
+        ⚠️ Salva questo link: è l'unico modo per annullare o cambiare orario.
       </p>
       <button
         onClick={copia}
-        className="mt-1.5 w-full rounded-xl border border-crema/30 py-2 text-sm font-medium transition hover:bg-crema/10"
+        className="mt-2.5 w-full rounded-xl bg-terracotta py-2.5 text-sm font-semibold text-crema transition hover:opacity-90"
       >
-        {copiato ? 'Copiato ✓' : 'Copia il link della prenotazione'}
+        {copiato ? 'Copiato ✓' : '🔗 Copia il link della prenotazione'}
       </button>
     </div>
   );

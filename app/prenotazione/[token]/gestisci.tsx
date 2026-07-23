@@ -20,6 +20,8 @@ export interface DatiPrenotazione {
   servizio: { id: string; name: string; priceCents: number };
   operatore: { id: string; name: string };
   weekdayDisponibili: number[];
+  /** Oltre questo istante, annullare/cambiare orario richiede di contattare il salone. */
+  modificaEntro: string | null;
 }
 
 const euro = (cents: number) =>
@@ -36,7 +38,9 @@ export function GestisciPrenotazione({ dati }: { dati: DatiPrenotazione }) {
   const [invio, setInvio] = useState(false);
 
   const inizio = DateTime.fromISO(dati.startsAt).setZone(dati.tenant.timezone).setLocale('it');
-  const modificabile = dati.status === 'confirmed';
+  const scaduto =
+    dati.modificaEntro === null || DateTime.now() > DateTime.fromISO(dati.modificaEntro);
+  const modificabile = dati.status === 'confirmed' && !scaduto;
 
   async function annulla() {
     if (!window.confirm('Annullare questo appuntamento?')) return;
@@ -127,7 +131,9 @@ export function GestisciPrenotazione({ dati }: { dati: DatiPrenotazione }) {
           <p className="mt-3 text-sm text-inchiostro/50">
             {dati.status === 'cancelled'
               ? 'Questo appuntamento è stato annullato.'
-              : 'Questo appuntamento non è più modificabile.'}
+              : dati.status === 'confirmed' && scaduto
+                ? `Non è più possibile annullare o cambiare orario online: mancano meno di 8 ore di apertura. Contatta direttamente ${dati.tenant.name}.`
+                : 'Questo appuntamento non è più modificabile.'}
           </p>
         )}
       </div>

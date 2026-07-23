@@ -117,6 +117,7 @@ export default function AgendaAdmin() {
   }
 
   const giorno = DateTime.fromISO(data, { zone: salone.timezone });
+  const oggi = DateTime.now().setZone(salone.timezone).toISODate()!;
   const oraLocale = (iso: string) =>
     DateTime.fromISO(iso).setZone(salone.timezone).toFormat('HH:mm');
 
@@ -136,6 +137,14 @@ export default function AgendaAdmin() {
           <span className="font-medium capitalize">
             {giorno.setLocale('it').toFormat('cccc d LLLL')}
           </span>
+          {data !== oggi && (
+            <button
+              onClick={() => setData(oggi)}
+              className="rounded-lg bg-terracotta px-2 py-1 text-xs font-semibold text-crema transition hover:opacity-90"
+            >
+              Oggi
+            </button>
+          )}
           <input
             type="date"
             value={data}

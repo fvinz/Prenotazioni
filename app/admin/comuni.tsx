@@ -90,15 +90,15 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">{salone.name}</h1>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex shrink-0 items-center gap-4">
           <button
             onClick={copiaLinkWidget}
             title="Copia il link pubblico di prenotazione"
-            className="text-sm text-terracotta hover:underline"
+            className="flex items-center gap-1.5 rounded-xl bg-terracotta px-3.5 py-2 text-sm font-semibold text-crema shadow-sm transition hover:opacity-90"
           >
-            {copiato ? 'Copiato ✓' : 'Copia link prenotazioni'}
+            🔗 {copiato ? 'Copiato ✓' : 'Link prenotazioni'}
           </button>
-          <button onClick={esci} className="text-sm text-terracotta hover:underline">
+          <button onClick={esci} className="text-sm text-inchiostro/50 hover:text-terracotta hover:underline">
             Esci
           </button>
         </div>
