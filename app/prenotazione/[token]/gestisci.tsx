@@ -132,7 +132,7 @@ export function GestisciPrenotazione({ dati }: { dati: DatiPrenotazione }) {
             {dati.status === 'cancelled'
               ? 'Questo appuntamento è stato annullato.'
               : dati.status === 'confirmed' && scaduto
-                ? `Non è più possibile annullare o cambiare orario online: mancano meno di 8 ore di apertura. Contatta direttamente ${dati.tenant.name}.`
+                ? `Non è più possibile annullare o cambiare orario online: mancano meno di 12 ore all'appuntamento. Contatta direttamente ${dati.tenant.name}.`
                 : 'Questo appuntamento non è più modificabile.'}
           </p>
         )}

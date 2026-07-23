@@ -275,6 +275,19 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             {operatore ? ` con ${operatore.name}` : ''}.
           </p>
           <p className="mt-1 text-sm text-crema/60">Ti aspettiamo.</p>
+          <AggiungiAlCalendario
+            titolo={`${servizio.name} · ${dati.tenant.name}`}
+            descrizione={
+              `Appuntamento per ${servizio.name}` +
+              (operatore ? ` con ${operatore.name}` : '') +
+              ` da ${dati.tenant.name}.` +
+              (stato.managementToken
+                ? ` Gestisci la prenotazione: ${typeof window !== 'undefined' ? window.location.origin : ''}/prenotazione/${stato.managementToken}`
+                : '')
+            }
+            inizio={stato.slot.start}
+            durataMinuti={servizio.duration_minutes}
+          />
           {stato.managementToken && <LinkGestione token={stato.managementToken} />}
         </div>
       )}
@@ -605,6 +618,82 @@ function LinkGestione({ token }: { token: string }) {
       >
         {copiato ? 'Copiato ✓' : '🔗 Copia il link della prenotazione'}
       </button>
+    </div>
+  );
+}
+
+const formattaICS = (d: DateTime) => d.toUTC().toFormat("yyyyMMdd'T'HHmmss'Z'");
+
+const escapeICS = (testo: string) =>
+  testo.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+
+// "Aggiungi al calendario": Google Calendar via link (nessun file, apre
+// direttamente); per Apple/Outlook/altri si genera un .ics al volo nel
+// browser, senza nessuna rotta né dato aggiuntivo sul server — nessun
+// luogo (non ancora un campo del salone), solo titolo, orario e link di
+// gestione nella descrizione.
+function AggiungiAlCalendario(props: {
+  titolo: string;
+  descrizione: string;
+  inizio: string;
+  durataMinuti: number;
+}) {
+  const inizio = DateTime.fromISO(props.inizio);
+  const fine = inizio.plus({ minutes: props.durataMinuti });
+
+  const googleUrl = (() => {
+    const parametri = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: props.titolo,
+      dates: `${formattaICS(inizio)}/${formattaICS(fine)}`,
+      details: props.descrizione,
+    });
+    return `https://calendar.google.com/calendar/render?${parametri.toString()}`;
+  })();
+
+  function scaricaIcs() {
+    const contenuto = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Appunto//Prenotazioni//IT',
+      'BEGIN:VEVENT',
+      `UID:${crypto.randomUUID()}@appunto`,
+      `DTSTAMP:${formattaICS(DateTime.utc())}`,
+      `DTSTART:${formattaICS(inizio)}`,
+      `DTEND:${formattaICS(fine)}`,
+      `SUMMARY:${escapeICS(props.titolo)}`,
+      `DESCRIPTION:${escapeICS(props.descrizione)}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const blob = new Blob([contenuto], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'appuntamento.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="mt-4">
+      <p className="text-xs text-crema/60">Aggiungi il promemoria al calendario:</p>
+      <div className="mt-1.5 flex gap-2">
+        <a
+          href={googleUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 rounded-xl border border-crema/30 py-2 text-center text-sm font-medium transition hover:bg-crema/10"
+        >
+          📅 Google Calendar
+        </a>
+        <button
+          onClick={scaricaIcs}
+          className="flex-1 rounded-xl border border-crema/30 py-2 text-sm font-medium transition hover:bg-crema/10"
+        >
+          📥 Apple / Outlook
+        </button>
+      </div>
     </div>
   );
 }
