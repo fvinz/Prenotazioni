@@ -7,8 +7,38 @@
   --color-argilla: #dda07a;
   --color-sabbia: #e7dac7;
   --color-crema: #f5efe6;
+  --color-carta: #fbf8f2;
+  --color-buono: #4a7c59;
+
+  /* Colore per operatore nell'agenda a griglia: identifica la colonna, non
+     un'azione — per questo restano distinti dal terracotta dei pulsanti. */
+  --color-op-1: #a8623f;
+  --color-op-2: #6b8068;
+  --color-op-3: #b8873a;
+  --color-op-4: #9c5b6b;
 
   --font-display: 'Gloock', Georgia, serif;
   --font-sans: 'Work Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* Versione scura: segue la preferenza del sistema operativo, nessun
+   interruttore manuale per ora. Le utility Tailwind (bg-crema,
+   text-inchiostro, bg-terracotta, ecc.) leggono queste variabili, quindi
+   ridefinirle qui basta a far scattare il tema in tutta l'app, senza
+   toccare i componenti. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-crema: #191512;
+    --color-inchiostro: #efe7da;
+    --color-carta: #211c18;
+    --color-sabbia: #2c2620;
+    --color-terracotta: #d06a4a;
+    --color-argilla: #c98f68;
+    --color-buono: #7fb08a;
+    --color-op-1: #c17a54;
+    --color-op-2: #8aa686;
+    --color-op-3: #d1a75f;
+    --color-op-4: #c07f91;
+  }
 }

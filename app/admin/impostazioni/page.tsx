@@ -4,7 +4,8 @@
 // L'interfaccia nasconde la sezione allo staff, ma la vera barriera sono
 // le policy RLS della migration 0005: le scritture passano solo da owner.
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { Intestazione, useSalone } from '../comuni';
 import { SezioneServizi } from './servizi';
@@ -42,8 +43,18 @@ export interface Coppia {
 }
 
 export default function ImpostazioniAdmin() {
+  return (
+    <Suspense fallback={<main className="p-8 text-center text-inchiostro/60">Un attimo…</main>}>
+      <Contenuto />
+    </Suspense>
+  );
+}
+
+function Contenuto() {
   const supabase = getSupabaseBrowserClient();
   const { salone, ruolo, errore } = useSalone();
+  const parametri = useSearchParams();
+  const operatorePreselezionato = parametri.get('operatore') ?? undefined;
 
   const [operatori, setOperatori] = useState<Operatore[]>([]);
   const [servizi, setServizi] = useState<Servizio[]>([]);
@@ -119,7 +130,13 @@ export default function ImpostazioniAdmin() {
             onRicarica={ricarica}
           />
           <SezioneTeam salone={salone} operatori={operatori} onRicarica={ricarica} />
-          <SezioneOrari salone={salone} operatori={operatori} fasce={fasce} onRicarica={ricarica} />
+          <SezioneOrari
+            salone={salone}
+            operatori={operatori}
+            fasce={fasce}
+            operatorePreselezionato={operatorePreselezionato}
+            onRicarica={ricarica}
+          />
           <SezioneChiusure salone={salone} operatori={operatori} />
         </div>
       )}

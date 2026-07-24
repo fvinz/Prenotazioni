@@ -121,7 +121,7 @@ export function GestisciPrenotazione({ dati }: { dati: DatiPrenotazione }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-sabbia bg-white/60 p-5">
+      <div className="rounded-xl border border-sabbia bg-carta/60 p-5">
         <p className="font-display text-2xl">{dati.servizio.name}</p>
         <p className="mt-1 capitalize text-inchiostro/70">
           {inizio.toFormat('cccc d LLLL')} alle {inizio.toFormat('HH:mm')} · con {dati.operatore.name}
@@ -149,7 +149,7 @@ export function GestisciPrenotazione({ dati }: { dati: DatiPrenotazione }) {
           <button
             onClick={annulla}
             disabled={invio}
-            className="flex-1 rounded-xl border border-terracotta py-2.5 font-semibold text-terracotta transition hover:bg-white/60 disabled:opacity-60"
+            className="flex-1 rounded-xl border border-terracotta py-2.5 font-semibold text-terracotta transition hover:bg-carta/60 disabled:opacity-60"
           >
             Annulla appuntamento
           </button>

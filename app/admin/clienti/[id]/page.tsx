@@ -151,7 +151,7 @@ export default function SchedaCliente() {
         ← Tutti i clienti
       </Link>
 
-      <div className="mt-3 rounded-xl border border-sabbia bg-white/60 p-4">
+      <div className="mt-3 rounded-xl border border-sabbia bg-carta/60 p-4">
         <h2 className="font-display text-2xl">
           {cliente.first_name} {cliente.last_name ?? ''}
         </h2>
@@ -206,7 +206,7 @@ export default function SchedaCliente() {
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           placeholder="Preferenze, allergie, colore usato…"
-          className="w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 outline-none transition focus:border-terracotta"
+          className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta"
         />
         <button
           onClick={salvaNote}
@@ -220,7 +220,7 @@ export default function SchedaCliente() {
       <section className="mt-6">
         <h3 className="mb-2 font-display text-xl">Storico appuntamenti</h3>
         {storico.length === 0 ? (
-          <p className="rounded-xl bg-white/60 p-4 text-center text-inchiostro/60">
+          <p className="rounded-xl bg-carta/60 p-4 text-center text-inchiostro/60">
             Nessun appuntamento finora.
           </p>
         ) : (
@@ -228,7 +228,7 @@ export default function SchedaCliente() {
             {storico.map((a) => (
               <li
                 key={a.id}
-                className={`flex items-baseline justify-between gap-3 rounded-xl border border-sabbia bg-white/60 px-4 py-2.5 ${
+                className={`flex items-baseline justify-between gap-3 rounded-xl border border-sabbia bg-carta/60 px-4 py-2.5 ${
                   a.status === 'cancelled' ? 'opacity-50' : ''
                 }`}
               >
@@ -281,7 +281,7 @@ export default function SchedaCliente() {
 
 function Stat({ etichetta, valore, accento }: { etichetta: string; valore: string; accento?: boolean }) {
   return (
-    <div className="rounded-xl border border-sabbia bg-white/60 px-3 py-2">
+    <div className="rounded-xl border border-sabbia bg-carta/60 px-3 py-2">
       <p className="text-xs uppercase tracking-wide text-inchiostro/50">{etichetta}</p>
       <p className={`mt-0.5 truncate font-medium ${accento ? 'text-terracotta' : ''}`} title={valore}>
         {valore}

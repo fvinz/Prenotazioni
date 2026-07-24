@@ -176,8 +176,8 @@ export function ProponiAlternative(props: {
                 key={a.slot.start}
                 className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
                   scelte.has(a.slot.start)
-                    ? 'border-terracotta bg-white/80'
-                    : 'border-sabbia bg-white/50'
+                    ? 'border-terracotta bg-carta/80'
+                    : 'border-sabbia bg-carta/50'
                 }`}
               >
                 <input
@@ -199,7 +199,7 @@ export function ProponiAlternative(props: {
           readOnly
           value={messaggio}
           rows={7}
-          className="w-full rounded-xl border border-sabbia bg-white/60 px-3 py-2 font-mono text-xs text-inchiostro/80"
+          className="w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 font-mono text-xs text-inchiostro/80"
           aria-label="Messaggio per il cliente"
         />
         <div className="mt-2 flex gap-2">
@@ -213,7 +213,7 @@ export function ProponiAlternative(props: {
           </a>
           <button
             onClick={copia}
-            className="flex-1 rounded-xl border border-terracotta py-2.5 font-semibold text-terracotta transition hover:bg-white/60"
+            className="flex-1 rounded-xl border border-terracotta py-2.5 font-semibold text-terracotta transition hover:bg-carta/60"
           >
             {copiato ? 'Copiato ✓' : 'Copia messaggio'}
           </button>

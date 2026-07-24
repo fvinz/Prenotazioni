@@ -26,10 +26,12 @@ export function SezioneOrari(props: {
   salone: Salone;
   operatori: Operatore[];
   fasce: Fascia[];
+  /** Da un link diretto (es. dalla griglia agenda): apre già su questo operatore. */
+  operatorePreselezionato?: string;
   onRicarica: () => void;
 }) {
   const supabase = getSupabaseBrowserClient();
-  const [selezione, setSelezione] = useState(TUTTI);
+  const [selezione, setSelezione] = useState(props.operatorePreselezionato ?? TUTTI);
   const [errore, setErrore] = useState<string | null>(null);
 
   const attivi = props.operatori.filter((o) => o.active);
@@ -95,12 +97,12 @@ export function SezioneOrari(props: {
   }
 
   return (
-    <section>
+    <section id="orari">
       <h2 className="mb-2 font-display text-2xl">Orari</h2>
       <select
         value={selezione}
         onChange={(e) => setSelezione(e.target.value)}
-        className="mb-3 w-full rounded-xl border border-sabbia bg-white/60 px-4 py-2 outline-none transition focus:border-terracotta"
+        className="mb-3 w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-2 outline-none transition focus:border-terracotta"
         aria-label="Operatore"
       >
         <option value={TUTTI}>Tutto il team ({attivi.length} operatori)</option>
@@ -117,7 +119,7 @@ export function SezioneOrari(props: {
           return (
             <div
               key={g.weekday}
-              className="rounded-xl border border-sabbia bg-white/60 px-4 py-2.5"
+              className="rounded-xl border border-sabbia bg-carta/60 px-4 py-2.5"
             >
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span className="w-24 shrink-0 text-sm font-medium">{g.nome}</span>
@@ -147,7 +149,7 @@ export function SezioneOrari(props: {
                     name="dalle"
                     type="time"
                     required
-                    className="rounded-lg border border-sabbia bg-white/80 px-1.5 py-0.5"
+                    className="rounded-lg border border-sabbia bg-carta/80 px-1.5 py-0.5"
                     aria-label={`${g.nome}: dalle`}
                   />
                   <span className="text-inchiostro/40">–</span>
@@ -155,7 +157,7 @@ export function SezioneOrari(props: {
                     name="alle"
                     type="time"
                     required
-                    className="rounded-lg border border-sabbia bg-white/80 px-1.5 py-0.5"
+                    className="rounded-lg border border-sabbia bg-carta/80 px-1.5 py-0.5"
                     aria-label={`${g.nome}: alle`}
                   />
                   <button type="submit" className="ml-1 font-medium text-terracotta hover:underline">

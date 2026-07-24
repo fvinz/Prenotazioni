@@ -18,7 +18,7 @@ export interface Salone {
 export type Ruolo = 'owner' | 'staff';
 
 export const CAMPO =
-  'w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 outline-none transition focus:border-terracotta';
+  'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
 
 /** Guardia di accesso + salone e ruolo dell'utente corrente. */
 export function useSalone() {
@@ -113,7 +113,7 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
               className={`rounded-xl px-4 py-1.5 text-sm font-medium transition ${
                 attiva
                   ? 'bg-inchiostro text-crema'
-                  : 'bg-white/60 text-inchiostro hover:bg-sabbia'
+                  : 'bg-carta/60 text-inchiostro hover:bg-sabbia'
               }`}
             >
               {s.label}

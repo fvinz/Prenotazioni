@@ -71,7 +71,7 @@ export function SezioneServizi(props: {
     return (
       <form
         onSubmit={(e) => salva(e, servizio?.id ?? null)}
-        className="space-y-3 rounded-xl border border-terracotta/50 bg-white/60 p-4"
+        className="space-y-3 rounded-xl border border-terracotta/50 bg-carta/60 p-4"
       >
         <input
           name="nome"
@@ -172,7 +172,7 @@ export function SezioneServizi(props: {
               <Form servizio={s} />
             ) : (
               <div
-                className={`flex items-baseline justify-between rounded-xl border border-sabbia bg-white/60 px-4 py-3 ${
+                className={`flex items-baseline justify-between rounded-xl border border-sabbia bg-carta/60 px-4 py-3 ${
                   s.active ? '' : 'opacity-50'
                 }`}
               >

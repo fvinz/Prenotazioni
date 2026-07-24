@@ -203,7 +203,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
                     operatoreUnicoId: ops.length === 1 ? ops[0].id : undefined,
                   })
                 }
-                className="flex w-full items-baseline justify-between rounded-xl border border-sabbia bg-white/60 px-4 py-3 text-left transition hover:border-terracotta disabled:opacity-40"
+                className="flex w-full items-baseline justify-between rounded-xl border border-sabbia bg-carta/60 px-4 py-3 text-left transition hover:border-terracotta disabled:opacity-40"
               >
                 <span className="font-medium">{s.name}</span>
                 <span className="font-mono text-sm text-inchiostro/60">
@@ -221,7 +221,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             <button
               key={o.id}
               onClick={() => dispatch({ tipo: 'scegliOperatore', operatoreId: o.id })}
-              className="w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 text-left font-medium transition hover:border-terracotta"
+              className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 text-left font-medium transition hover:border-terracotta"
             >
               {o.name}
             </button>
@@ -356,7 +356,7 @@ export function StrisciaGiorni(props: {
           className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
             props.selezionato === g.data
               ? 'border-terracotta bg-terracotta font-medium text-crema'
-              : 'border-sabbia bg-white/60 hover:border-terracotta'
+              : 'border-sabbia bg-carta/60 hover:border-terracotta'
           }`}
         >
           {g.etichetta}
@@ -422,7 +422,7 @@ export function SceltaOrario(props: {
                 className={`relative rounded-xl border py-2 font-mono text-sm transition ${
                   consigliato
                     ? 'border-terracotta bg-terracotta/10 font-medium'
-                    : 'border-sabbia bg-white/60 hover:border-terracotta'
+                    : 'border-sabbia bg-carta/60 hover:border-terracotta'
                 }`}
               >
                 {consigliato && (
@@ -524,7 +524,7 @@ function FormDati(props: {
   }
 
   const campo =
-    'w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 outline-none transition focus:border-terracotta';
+    'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
 
   return (
     <form onSubmit={invia} className="space-y-3">
@@ -549,7 +549,7 @@ function FormDati(props: {
           name="prefisso"
           defaultValue={props.precompilato?.prefisso ?? '+39'}
           aria-label="Prefisso internazionale"
-          className="shrink-0 rounded-xl border border-sabbia bg-white/60 px-3 py-3 font-mono text-sm outline-none transition focus:border-terracotta"
+          className="shrink-0 rounded-xl border border-sabbia bg-carta/60 px-3 py-3 font-mono text-sm outline-none transition focus:border-terracotta"
         >
           {PREFISSI.map((p) => (
             <option key={p.code} value={p.code}>

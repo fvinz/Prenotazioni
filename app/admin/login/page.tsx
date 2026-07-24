@@ -31,7 +31,7 @@ export default function LoginAdmin() {
   }
 
   const campo =
-    'w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 outline-none transition focus:border-terracotta';
+    'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-sm flex-col justify-center gap-6 px-4">

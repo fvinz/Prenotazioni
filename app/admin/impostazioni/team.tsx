@@ -68,7 +68,7 @@ export function SezioneTeam(props: {
         {props.operatori.map((o) => (
           <li
             key={o.id}
-            className={`rounded-xl border border-sabbia bg-white/60 px-4 py-3 ${
+            className={`rounded-xl border border-sabbia bg-carta/60 px-4 py-3 ${
               o.active ? '' : 'opacity-50'
             }`}
           >
