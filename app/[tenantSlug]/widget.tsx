@@ -655,9 +655,9 @@ function AggiungiAlCalendario(props: {
     const contenuto = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//Appunto//Prenotazioni//IT',
+      'PRODID:-//Puntuale//Prenotazioni//IT',
       'BEGIN:VEVENT',
-      `UID:${crypto.randomUUID()}@appunto`,
+      `UID:${crypto.randomUUID()}@puntuale.app`,
       `DTSTAMP:${formattaICS(DateTime.utc())}`,
       `DTSTART:${formattaICS(inizio)}`,
       `DTEND:${formattaICS(fine)}`,

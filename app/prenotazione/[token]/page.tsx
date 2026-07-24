@@ -62,7 +62,7 @@ export default async function PaginaGestionePrenotazione({
     <main className="mx-auto min-h-screen w-full max-w-lg px-4 py-8">
       <header className="mb-8 text-center">
         <p className="font-display text-2xl">
-          appunto<span className="text-terracotta">.</span>
+          puntuale<span className="text-terracotta">.</span>
         </p>
         <h1 className="mt-4 font-display text-3xl tracking-tight">{dati.tenant.name}</h1>
       </header>

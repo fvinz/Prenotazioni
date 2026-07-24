@@ -86,7 +86,7 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
       <div className="flex items-baseline justify-between">
         <div>
           <p className="font-display text-2xl">
-            appunto<span className="text-terracotta">.</span>
+            puntuale<span className="text-terracotta">.</span>
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">{salone.name}</h1>
         </div>

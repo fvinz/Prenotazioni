@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* Brand identity "Appunto" — palette e caratteri della tavola d'identità. */
+/* Brand identity "Puntuale" — palette e caratteri della tavola d'identità. */
 @theme {
   --color-inchiostro: #211c18;
   --color-terracotta: #be5537;

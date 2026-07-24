@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Appunto — Le prenotazioni del tuo salone. Tue.',
+  title: 'Puntuale — Le prenotazioni del tuo salone. Tue.',
   description:
-    'Appunto: il sistema di prenotazioni per saloni e attività su appuntamento.',
+    'Puntuale: il sistema di prenotazioni per saloni e attività su appuntamento.',
 };
 
 // I caratteri del brand arrivano da Google Fonts a runtime (link, non
