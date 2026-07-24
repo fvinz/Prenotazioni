@@ -32,7 +32,11 @@
     --color-crema: #191512;
     --color-inchiostro: #efe7da;
     --color-carta: #211c18;
-    --color-sabbia: #2c2620;
+    /* Più chiaro di quanto sembri "coerente" col resto: sabbia serve qui
+       da bordo/separatore, e contro il fondo scuro un tono troppo vicino
+       a --carta risultava praticamente invisibile (contrasto ~1.2:1,
+       sotto qualunque soglia leggibile). */
+    --color-sabbia: #6f5c46;
     --color-terracotta: #d06a4a;
     --color-argilla: #c98f68;
     --color-buono: #7fb08a;

@@ -19,6 +19,7 @@ export default function AgendaAdmin() {
 
   const [operatori, setOperatori] = useState<Operatore[]>([]);
   const [data, setData] = useState(() => DateTime.now().toISODate()!);
+  const [vista, setVista] = useState<'giorno' | 'settimana'>('giorno');
   const [prenotazioni, setPrenotazioni] = useState<Prenotazione[] | null>(null);
   const [chiusure, setChiusure] = useState<Chiusura[]>([]);
   const [errore, setErrore] = useState<string | null>(null);
@@ -37,12 +38,15 @@ export default function AgendaAdmin() {
     })();
   }, [supabase, salone]);
 
-  // Prenotazioni e chiusure del giorno selezionato (nel fuso del salone).
+  // Prenotazioni e chiusure dell'intera settimana che contiene il giorno
+  // selezionato (sempre, anche in vista Giorno): evita un ricaricamento
+  // quando si passa da una vista all'altra, e il volume per un salone
+  // piccolo è comunque trascurabile.
   const carica = useCallback(async () => {
     if (!salone) return;
     setPrenotazioni(null);
-    const inizio = DateTime.fromISO(data, { zone: salone.timezone }).startOf('day');
-    const fine = inizio.plus({ days: 1 });
+    const inizio = DateTime.fromISO(data, { zone: salone.timezone }).startOf('week');
+    const fine = inizio.plus({ weeks: 1 });
     const [prenotazioniRes, chiusureRes] = await Promise.all([
       supabase
         .from('bookings')
@@ -103,22 +107,27 @@ export default function AgendaAdmin() {
 
   const giorno = DateTime.fromISO(data, { zone: salone.timezone });
   const oggi = DateTime.now().setZone(salone.timezone).toISODate()!;
+  const inizioSettimana = giorno.startOf('week');
+  const fineSettimana = inizioSettimana.plus({ days: 6 });
+  const passo = vista === 'settimana' ? { weeks: 1 } : { days: 1 };
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
       <Intestazione salone={salone} ruolo={ruolo} />
 
-      <div className="mb-4 flex items-center justify-between rounded-xl bg-sabbia px-4 py-2">
-        <button
-          onClick={() => setData(giorno.minus({ days: 1 }).toISODate()!)}
-          className="font-medium text-terracotta"
-          aria-label="Giorno precedente"
-        >
-          ←
-        </button>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-sabbia px-4 py-2">
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setData(giorno.minus(passo).toISODate()!)}
+            className="font-medium text-terracotta"
+            aria-label={vista === 'settimana' ? 'Settimana precedente' : 'Giorno precedente'}
+          >
+            ←
+          </button>
           <span className="font-medium capitalize">
-            {giorno.setLocale('it').toFormat('cccc d LLLL')}
+            {vista === 'settimana'
+              ? `${inizioSettimana.setLocale('it').toFormat('d LLL')} – ${fineSettimana.setLocale('it').toFormat('d LLL')}`
+              : giorno.setLocale('it').toFormat('cccc d LLLL')}
           </span>
           {data !== oggi && (
             <button
@@ -135,14 +144,32 @@ export default function AgendaAdmin() {
             className="rounded-lg border border-inchiostro/10 bg-carta/60 px-2 py-1 text-sm"
             aria-label="Scegli una data"
           />
+          <button
+            onClick={() => setData(giorno.plus(passo).toISODate()!)}
+            className="font-medium text-terracotta"
+            aria-label={vista === 'settimana' ? 'Settimana successiva' : 'Giorno successivo'}
+          >
+            →
+          </button>
         </div>
-        <button
-          onClick={() => setData(giorno.plus({ days: 1 }).toISODate()!)}
-          className="font-medium text-terracotta"
-          aria-label="Giorno successivo"
-        >
-          →
-        </button>
+        <div className="flex overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
+          <button
+            onClick={() => setVista('giorno')}
+            className={`px-3 py-1 font-medium transition ${
+              vista === 'giorno' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+            }`}
+          >
+            Giorno
+          </button>
+          <button
+            onClick={() => setVista('settimana')}
+            className={`px-3 py-1 font-medium transition ${
+              vista === 'settimana' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+            }`}
+          >
+            Settimana
+          </button>
+        </div>
       </div>
 
       <button
@@ -157,8 +184,10 @@ export default function AgendaAdmin() {
       ) : (
         <GrigliaAgenda
           salone={salone}
+          vista={vista}
           giornoISO={data}
-          oggi={data === oggi}
+          inizioSettimanaISO={inizioSettimana.toISODate()!}
+          oggiISO={oggi}
           operatori={operatori}
           prenotazioni={prenotazioni}
           chiusure={chiusure}

@@ -1,12 +1,15 @@
 'use client';
 
-// Agenda a griglia: un operatore per colonna, orari sull'asse verticale.
+// Agenda a griglia. Vista Giorno: un operatore per colonna (desktop) o
+// selettore di operatore + colonna singola (mobile). Vista Settimana:
+// stessa griglia oraria ma con i 7 giorni come colonne, per un operatore
+// alla volta (con più operatori insieme sarebbe illeggibile).
+//
 // Cliccando su un appuntamento si apre il dettaglio con le azioni
 // (Fatta/No-show/Annulla, le stesse di sempre); cliccando su uno spazio
 // vuoto si apre "Blocca fascia", che crea direttamente una riga in
 // time_off — la stessa tabella già usata da Impostazioni → Chiusure, solo
-// raggiungibile da qui senza cambiare pagina. Su schermi piccoli si passa
-// a un selettore di operatore + una sola colonna alla volta.
+// raggiungibile da qui senza cambiare pagina.
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -49,10 +52,10 @@ const STATO_ETICHETTA: Record<string, string> = {
   no_show: 'no-show',
 };
 
-const PX_ORA = 80;
+const PX_ORA = 60;
 
 // Le classi sono scritte per intero (non composte a runtime): il
-// compilatore di Tailwind deve vederle così com'sono nel codice sorgente
+// compilatore di Tailwind deve vederle così come sono nel codice sorgente
 // per generarle.
 const STILE_OP = [
   { bordo: 'border-l-op-1', avatar: 'bg-op-1' },
@@ -71,6 +74,21 @@ function iniziali(nome: string): string {
     .toUpperCase();
 }
 
+/** Righe che si sovrappongono al giorno indicato (per prenotazioni e chiusure). */
+function delGiorno<T extends { starts_at: string; ends_at: string }>(
+  righe: T[],
+  giornoISO: string,
+  tz: string,
+): T[] {
+  const inizio = DateTime.fromISO(giornoISO, { zone: tz }).startOf('day');
+  const fine = inizio.plus({ days: 1 });
+  return righe.filter((r) => {
+    const s = DateTime.fromISO(r.starts_at);
+    const e = DateTime.fromISO(r.ends_at);
+    return s < fine && e > inizio;
+  });
+}
+
 interface Bozza {
   operatorId: string;
   operatorNome: string;
@@ -80,9 +98,12 @@ interface Bozza {
 
 export function GrigliaAgenda(props: {
   salone: Salone;
+  vista: 'giorno' | 'settimana';
   giornoISO: string;
-  oggi: boolean;
+  inizioSettimanaISO: string;
+  oggiISO: string;
   operatori: Operatore[];
+  /** Copre l'intera settimana che contiene giornoISO, indipendentemente dalla vista. */
   prenotazioni: Prenotazione[];
   chiusure: Chiusura[];
   onCambiaStato: (p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') => void;
@@ -92,7 +113,7 @@ export function GrigliaAgenda(props: {
   const tz = props.salone.timezone;
   const [dettaglio, setDettaglio] = useState<Prenotazione | null>(null);
   const [bozza, setBozza] = useState<Bozza | null>(null);
-  const [operatoreMobile, setOperatoreMobile] = useState<string | null>(null);
+  const [operatoreSelezionato, setOperatoreSelezionato] = useState<string | null>(null);
   const [invioBlocco, setInvioBlocco] = useState(false);
   const [erroreBlocco, setErroreBlocco] = useState<string | null>(null);
 
@@ -104,34 +125,26 @@ export function GrigliaAgenda(props: {
     );
   }
 
-  // Finestra oraria della griglia: 8–20 di default, allargata se un
-  // appuntamento cade fuori (mai tagliato).
-  let oraMin = 8;
-  let oraMax = 20;
-  for (const p of props.prenotazioni) {
-    const s = DateTime.fromISO(p.starts_at).setZone(tz);
-    const e = DateTime.fromISO(p.ends_at).setZone(tz);
-    oraMin = Math.min(oraMin, Math.floor(s.hour + s.minute / 60));
-    oraMax = Math.max(oraMax, Math.ceil(e.hour + e.minute / 60));
-  }
-  const altezzaGriglia = (oraMax - oraMin) * PX_ORA;
-  const oreEtichette = Array.from({ length: oraMax - oraMin + 1 }, (_, i) => oraMin + i);
-  const inizioGiorno = DateTime.fromISO(props.giornoISO, { zone: tz }).startOf('day');
+  const idSelezionato = operatoreSelezionato ?? props.operatori[0].id;
+  const indiceSelezionato = props.operatori.findIndex((o) => o.id === idSelezionato);
+  const opSelezionato = props.operatori[indiceSelezionato];
 
-  function posizionePx(iso: string): number {
+  function posizionePx(iso: string, oraMin: number): number {
     const dt = DateTime.fromISO(iso).setZone(tz);
     const minuti = (dt.hour - oraMin) * 60 + dt.minute;
     return (minuti / 60) * PX_ORA;
   }
 
-  const adessoOffset = (() => {
-    if (!props.oggi) return null;
+  /** Offset in px della linea "adesso" per un dato giorno, o null se quel giorno non è oggi. */
+  function adessoPer(giornoISO: string, oraMin: number, oraMax: number): number | null {
+    if (giornoISO !== props.oggiISO) return null;
     const adesso = DateTime.now().setZone(tz);
     const minuti = (adesso.hour - oraMin) * 60 + adesso.minute;
     return minuti >= 0 && minuti <= (oraMax - oraMin) * 60 ? (minuti / 60) * PX_ORA : null;
-  })();
+  }
 
-  function apriSlot(operatorId: string, operatorNome: string, ora: number) {
+  function apriSlot(operatorId: string, operatorNome: string, giornoISO: string, ora: number) {
+    const inizioGiorno = DateTime.fromISO(giornoISO, { zone: tz }).startOf('day');
     const inizio = inizioGiorno.plus({ hours: ora });
     setBozza({ operatorId, operatorNome, inizio, fine: inizio.plus({ hours: 1 }) });
   }
@@ -158,14 +171,158 @@ export function GrigliaAgenda(props: {
     props.onBloccato();
   }
 
-  const operatoreSelezionatoMobile = operatoreMobile ?? props.operatori[0].id;
-  const indiceMobile = props.operatori.findIndex((o) => o.id === operatoreSelezionatoMobile);
-  const opMobile = props.operatori[indiceMobile];
+  const contenuto =
+    props.vista === 'settimana' ? (
+      <VistaSettimana
+        operatori={props.operatori}
+        operatoreSelezionatoId={idSelezionato}
+        indiceSelezionato={indiceSelezionato}
+        onSelezionaOperatore={setOperatoreSelezionato}
+        inizioSettimanaISO={props.inizioSettimanaISO}
+        oggiISO={props.oggiISO}
+        tz={tz}
+        prenotazioni={props.prenotazioni.filter((p) => p.operator_id === opSelezionato.id)}
+        chiusure={props.chiusure.filter(
+          (c) => c.operator_id === opSelezionato.id || c.operator_id === null,
+        )}
+        posizionePx={posizionePx}
+        adessoPer={adessoPer}
+        onSelezionaPrenotazione={setDettaglio}
+        onSelezionaSlot={(giornoISO, ora) => apriSlot(opSelezionato.id, opSelezionato.name, giornoISO, ora)}
+      />
+    ) : (
+      <VistaGiorno
+        operatori={props.operatori}
+        operatoreSelezionatoId={idSelezionato}
+        indiceSelezionato={indiceSelezionato}
+        onSelezionaOperatore={setOperatoreSelezionato}
+        giornoISO={props.giornoISO}
+        tz={tz}
+        prenotazioni={delGiorno(props.prenotazioni, props.giornoISO, tz)}
+        chiusure={delGiorno(props.chiusure, props.giornoISO, tz)}
+        posizionePx={posizionePx}
+        adessoPer={adessoPer}
+        onSelezionaPrenotazione={setDettaglio}
+        onSelezionaSlot={(operatorId, operatorNome, ora) =>
+          apriSlot(operatorId, operatorNome, props.giornoISO, ora)
+        }
+      />
+    );
 
   return (
     <>
-      {/* Desktop: un operatore per colonna. */}
-      <div className="hidden overflow-x-auto rounded-xl border border-sabbia md:block">
+      {contenuto}
+
+      {dettaglio && (
+        <DettaglioPrenotazione
+          prenotazione={dettaglio}
+          tz={tz}
+          onChiudi={() => setDettaglio(null)}
+          onCambiaStato={(stato) => {
+            props.onCambiaStato(dettaglio, stato);
+            setDettaglio(null);
+          }}
+        />
+      )}
+
+      {bozza && (
+        <BloccaFascia
+          bozza={bozza}
+          invio={invioBlocco}
+          errore={erroreBlocco}
+          onChiudi={() => setBozza(null)}
+          onConferma={confermaBlocco}
+        />
+      )}
+    </>
+  );
+}
+
+function finestraOraria(righe: { starts_at: string; ends_at: string }[], tz: string) {
+  let oraMin = 9;
+  let oraMax = 19;
+  for (const r of righe) {
+    const s = DateTime.fromISO(r.starts_at).setZone(tz);
+    const e = DateTime.fromISO(r.ends_at).setZone(tz);
+    oraMin = Math.min(oraMin, Math.floor(s.hour + s.minute / 60));
+    oraMax = Math.max(oraMax, Math.ceil(e.hour + e.minute / 60));
+  }
+  return { oraMin, oraMax };
+}
+
+function EtichetteOre(props: { oraMin: number; oraMax: number; piccole?: boolean }) {
+  const ore = Array.from({ length: props.oraMax - props.oraMin + 1 }, (_, i) => props.oraMin + i);
+  return (
+    <div className="relative border-r border-sabbia">
+      {ore.map((ora) => (
+        <span
+          key={ora}
+          className={`absolute right-1 -translate-y-1/2 font-mono text-inchiostro/40 ${props.piccole ? 'text-[11px]' : 'text-xs'}`}
+          style={{ top: (ora - props.oraMin) * PX_ORA }}
+        >
+          {ora}:00
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SelettoreOperatore(props: {
+  operatori: Operatore[];
+  selezionatoId: string;
+  onSeleziona: (id: string) => void;
+}) {
+  return (
+    <div className="mb-3 flex gap-3 overflow-x-auto pb-1">
+      {props.operatori.map((op, i) => (
+        <button
+          key={op.id}
+          onClick={() => props.onSeleziona(op.id)}
+          className={`flex shrink-0 flex-col items-center gap-1 ${
+            props.selezionatoId === op.id ? 'opacity-100' : 'opacity-45'
+          }`}
+        >
+          <span
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-crema ${STILE_OP[i % STILE_OP.length].avatar} ${
+              props.selezionatoId === op.id ? 'ring-2 ring-terracotta ring-offset-2 ring-offset-crema' : ''
+            }`}
+          >
+            {iniziali(op.name)}
+          </span>
+          <span className="text-[11px]">{op.name}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function VistaGiorno(props: {
+  operatori: Operatore[];
+  operatoreSelezionatoId: string;
+  indiceSelezionato: number;
+  onSelezionaOperatore: (id: string) => void;
+  giornoISO: string;
+  tz: string;
+  prenotazioni: Prenotazione[];
+  chiusure: Chiusura[];
+  posizionePx: (iso: string, oraMin: number) => number;
+  adessoPer: (giornoISO: string, oraMin: number, oraMax: number) => number | null;
+  onSelezionaPrenotazione: (p: Prenotazione) => void;
+  onSelezionaSlot: (operatorId: string, operatorNome: string, ora: number) => void;
+}) {
+  const { oraMin, oraMax } = finestraOraria(props.prenotazioni, props.tz);
+  const altezzaGriglia = (oraMax - oraMin) * PX_ORA;
+  const opSelezionato = props.operatori[props.indiceSelezionato];
+  const adessoOffset = props.adessoPer(props.giornoISO, oraMin, oraMax);
+
+  return (
+    <>
+      {/* Desktop: un operatore per colonna. Altezza massima legata al
+          viewport: nella finestra oraria di default (9–19) ci sta tutto
+          senza scorrimento; se la giornata si allunga (appuntamenti fuori
+          dall'orario tipico, o schermi bassi) scorre solo la griglia,
+          l'intestazione resta visibile. */}
+      <div className="hidden max-h-[calc(100vh-260px)] overflow-auto rounded-xl border border-sabbia md:block">
         <div
           className="relative grid min-w-[720px]"
           style={{
@@ -201,151 +358,159 @@ export function GrigliaAgenda(props: {
             </div>
           ))}
 
-          <div className="relative border-r border-sabbia" style={{ gridRow: 2 }}>
-            {oreEtichette.map((ora) => (
-              <span
-                key={ora}
-                className="absolute right-1 -translate-y-1/2 font-mono text-xs text-inchiostro/40"
-                style={{ top: (ora - oraMin) * PX_ORA }}
-              >
-                {ora}:00
-              </span>
-            ))}
+          <div style={{ gridRow: 2 }}>
+            <EtichetteOre oraMin={oraMin} oraMax={oraMax} />
           </div>
 
           {props.operatori.map((op, i) => (
             <ColonnaOperatore
               key={op.id}
-              operatore={op}
               indiceColore={i}
               oraMin={oraMin}
               oraMax={oraMax}
               prenotazioni={props.prenotazioni.filter((p) => p.operator_id === op.id)}
               chiusure={props.chiusure.filter((c) => c.operator_id === op.id || c.operator_id === null)}
-              posizionePx={posizionePx}
-              onSelezionaPrenotazione={setDettaglio}
-              onSelezionaSlot={(ora) => apriSlot(op.id, op.name, ora)}
+              posizionePx={(iso) => props.posizionePx(iso, oraMin)}
+              adessoOffset={adessoOffset}
+              onSelezionaPrenotazione={props.onSelezionaPrenotazione}
+              onSelezionaSlot={(ora) => props.onSelezionaSlot(op.id, op.name, ora)}
             />
           ))}
-
-          {adessoOffset !== null && (
-            <div
-              className="relative"
-              style={{ gridRow: 2, gridColumn: '1 / -1', pointerEvents: 'none' }}
-            >
-              <div className="absolute left-0 right-0 border-t border-terracotta" style={{ top: adessoOffset }}>
-                <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-terracotta" />
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
       {/* Mobile: selettore di operatore + una colonna sola. */}
       <div className="md:hidden">
-        <div className="mb-3 flex gap-3 overflow-x-auto pb-1">
-          {props.operatori.map((op, i) => (
-            <button
-              key={op.id}
-              onClick={() => setOperatoreMobile(op.id)}
-              className={`flex shrink-0 flex-col items-center gap-1 ${
-                operatoreSelezionatoMobile === op.id ? 'opacity-100' : 'opacity-45'
-              }`}
-            >
-              <span
-                className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-crema ${STILE_OP[i % STILE_OP.length].avatar} ${
-                  operatoreSelezionatoMobile === op.id ? 'ring-2 ring-terracotta ring-offset-2 ring-offset-crema' : ''
-                }`}
-              >
-                {iniziali(op.name)}
-              </span>
-              <span className="text-[11px]">{op.name}</span>
-            </button>
-          ))}
-        </div>
+        <SelettoreOperatore
+          operatori={props.operatori}
+          selezionatoId={props.operatoreSelezionatoId}
+          onSeleziona={props.onSelezionaOperatore}
+        />
         <div className="mb-2 flex items-center justify-between px-1">
-          <p className="text-sm font-medium">{opMobile.name}</p>
+          <p className="text-sm font-medium">{opSelezionato.name}</p>
           <Link
-            href={`/admin/impostazioni?operatore=${opMobile.id}#orari`}
+            href={`/admin/impostazioni?operatore=${opSelezionato.id}#orari`}
             className="text-xs text-inchiostro/50 hover:text-terracotta"
           >
             ⚙ Orari e ferie
           </Link>
         </div>
-        <div className="overflow-x-auto rounded-xl border border-sabbia">
+        <div className="max-h-[calc(100vh-360px)] overflow-auto rounded-xl border border-sabbia">
           <div
             className="relative grid min-w-[300px]"
             style={{ gridTemplateColumns: '44px 1fr', height: altezzaGriglia }}
           >
-            <div className="relative border-r border-sabbia">
-              {oreEtichette.map((ora) => (
-                <span
-                  key={ora}
-                  className="absolute right-1 -translate-y-1/2 font-mono text-[11px] text-inchiostro/40"
-                  style={{ top: (ora - oraMin) * PX_ORA }}
-                >
-                  {ora}:00
-                </span>
-              ))}
-            </div>
+            <EtichetteOre oraMin={oraMin} oraMax={oraMax} piccole />
             <ColonnaOperatore
-              operatore={opMobile}
-              indiceColore={indiceMobile}
+              indiceColore={props.indiceSelezionato}
               oraMin={oraMin}
               oraMax={oraMax}
-              prenotazioni={props.prenotazioni.filter((p) => p.operator_id === opMobile.id)}
+              prenotazioni={props.prenotazioni.filter((p) => p.operator_id === opSelezionato.id)}
               chiusure={props.chiusure.filter(
-                (c) => c.operator_id === opMobile.id || c.operator_id === null,
+                (c) => c.operator_id === opSelezionato.id || c.operator_id === null,
               )}
-              posizionePx={posizionePx}
-              onSelezionaPrenotazione={setDettaglio}
-              onSelezionaSlot={(ora) => apriSlot(opMobile.id, opMobile.name, ora)}
+              posizionePx={(iso) => props.posizionePx(iso, oraMin)}
+              adessoOffset={adessoOffset}
+              onSelezionaPrenotazione={props.onSelezionaPrenotazione}
+              onSelezionaSlot={(ora) => props.onSelezionaSlot(opSelezionato.id, opSelezionato.name, ora)}
             />
-            {adessoOffset !== null && (
-              <div
-                className="pointer-events-none absolute left-0 right-0 border-t border-terracotta"
-                style={{ top: adessoOffset, gridColumn: '1 / -1' }}
-              >
-                <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-terracotta" />
-              </div>
-            )}
           </div>
         </div>
       </div>
+    </>
+  );
+}
 
-      {dettaglio && (
-        <DettaglioPrenotazione
-          prenotazione={dettaglio}
-          tz={tz}
-          onChiudi={() => setDettaglio(null)}
-          onCambiaStato={(stato) => {
-            props.onCambiaStato(dettaglio, stato);
-            setDettaglio(null);
+const GIORNI_SETTIMANA = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+function VistaSettimana(props: {
+  operatori: Operatore[];
+  operatoreSelezionatoId: string;
+  indiceSelezionato: number;
+  onSelezionaOperatore: (id: string) => void;
+  inizioSettimanaISO: string;
+  oggiISO: string;
+  tz: string;
+  /** Già filtrate sull'operatore selezionato. */
+  prenotazioni: Prenotazione[];
+  chiusure: Chiusura[];
+  posizionePx: (iso: string, oraMin: number) => number;
+  adessoPer: (giornoISO: string, oraMin: number, oraMax: number) => number | null;
+  onSelezionaPrenotazione: (p: Prenotazione) => void;
+  onSelezionaSlot: (giornoISO: string, ora: number) => void;
+}) {
+  const { oraMin, oraMax } = finestraOraria(props.prenotazioni, props.tz);
+  const altezzaGriglia = (oraMax - oraMin) * PX_ORA;
+  const inizioSettimana = DateTime.fromISO(props.inizioSettimanaISO, { zone: props.tz });
+  const giorni = Array.from({ length: 7 }, (_, i) => inizioSettimana.plus({ days: i }));
+
+  return (
+    <>
+      <SelettoreOperatore
+        operatori={props.operatori}
+        selezionatoId={props.operatoreSelezionatoId}
+        onSeleziona={props.onSelezionaOperatore}
+      />
+      <div className="max-h-[calc(100vh-320px)] overflow-auto rounded-xl border border-sabbia">
+        <div
+          className="relative grid min-w-[720px]"
+          style={{
+            gridTemplateColumns: `52px repeat(7, minmax(96px, 1fr))`,
+            gridTemplateRows: `auto ${altezzaGriglia}px`,
           }}
-        />
-      )}
+        >
+          <div className="sticky top-0 z-10 border-b border-sabbia bg-crema" />
+          {giorni.map((g) => {
+            const giornoISO = g.toISODate()!;
+            const eOggi = giornoISO === props.oggiISO;
+            return (
+              <div
+                key={giornoISO}
+                className="sticky top-0 z-10 border-b border-l border-sabbia bg-crema px-2 py-2 text-center"
+              >
+                <p className="font-mono text-[10px] uppercase tracking-wide text-inchiostro/50">
+                  {GIORNI_SETTIMANA[g.weekday - 1]}
+                </p>
+                <p className={`text-sm font-semibold ${eOggi ? 'text-terracotta' : ''}`}>{g.day}</p>
+              </div>
+            );
+          })}
 
-      {bozza && (
-        <BloccaFascia
-          bozza={bozza}
-          invio={invioBlocco}
-          errore={erroreBlocco}
-          onChiudi={() => setBozza(null)}
-          onConferma={confermaBlocco}
-        />
-      )}
+          <div style={{ gridRow: 2 }}>
+            <EtichetteOre oraMin={oraMin} oraMax={oraMax} />
+          </div>
+
+          {giorni.map((g) => {
+            const giornoISO = g.toISODate()!;
+            return (
+              <ColonnaOperatore
+                key={giornoISO}
+                indiceColore={props.indiceSelezionato}
+                oraMin={oraMin}
+                oraMax={oraMax}
+                prenotazioni={delGiorno(props.prenotazioni, giornoISO, props.tz)}
+                chiusure={delGiorno(props.chiusure, giornoISO, props.tz)}
+                posizionePx={(iso) => props.posizionePx(iso, oraMin)}
+                adessoOffset={props.adessoPer(giornoISO, oraMin, oraMax)}
+                onSelezionaPrenotazione={props.onSelezionaPrenotazione}
+                onSelezionaSlot={(ora) => props.onSelezionaSlot(giornoISO, ora)}
+              />
+            );
+          })}
+        </div>
+      </div>
     </>
   );
 }
 
 function ColonnaOperatore(props: {
-  operatore: Operatore;
   indiceColore: number;
   oraMin: number;
   oraMax: number;
   prenotazioni: Prenotazione[];
   chiusure: Chiusura[];
   posizionePx: (iso: string) => number;
+  adessoOffset: number | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (ora: number) => void;
 }) {
@@ -415,6 +580,14 @@ function ColonnaOperatore(props: {
           </button>
         );
       })}
+      {props.adessoOffset !== null && (
+        <div
+          className="pointer-events-none absolute left-0 right-0 border-t border-terracotta"
+          style={{ top: props.adessoOffset }}
+        >
+          <span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-terracotta" />
+        </div>
+      )}
     </div>
   );
 }
