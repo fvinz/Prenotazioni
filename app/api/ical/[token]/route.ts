@@ -1,6 +1,6 @@
 // =====================================================================
 //  GET /api/ical/[token] — flusso iCal dell'operatore (sola lettura).
-//  L'operatore si abbona dal proprio telefono: gli appuntamenti Appunto
+//  L'operatore si abbona dal proprio telefono: gli appuntamenti Puntuale
 //  compaiono nel suo calendario personale. Il gettone segreto è l'unica
 //  chiave: la funzione get_ical_feed non espone nient'altro.
 // =====================================================================
@@ -48,7 +48,7 @@ export async function GET(
     .map((r) =>
       [
         'BEGIN:VEVENT',
-        `UID:${r.booking_id}@appunto`,
+        `UID:${r.booking_id}@puntuale.app`,
         `DTSTAMP:${adesso}`,
         `DTSTART:${icsIstante(r.starts_at!)}`,
         `DTEND:${icsIstante(r.ends_at!)}`,
@@ -61,9 +61,9 @@ export async function GET(
   const calendario = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Appunto//Prenotazioni//IT',
+    'PRODID:-//Puntuale//Prenotazioni//IT',
     'CALSCALE:GREGORIAN',
-    `X-WR-CALNAME:${icsTesto(`Appunto — ${feed[0].operator_name}`)}`,
+    `X-WR-CALNAME:${icsTesto(`Puntuale — ${feed[0].operator_name}`)}`,
     ...eventi,
     'END:VCALENDAR',
     '',

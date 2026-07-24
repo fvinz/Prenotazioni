@@ -6,6 +6,8 @@
 // La voce del brand: frasi brevi, dirette, zero gergo tecnico.
 
 import { useEffect, useReducer, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { DateTime } from 'luxon';
 import type { FreeSlot } from '@/lib/slots';
 import {
   giorniPrenotabili,
@@ -29,6 +31,7 @@ interface Stato {
   operatoreId?: string;
   giorno?: GiornoPrenotabile;
   slot?: FreeSlot;
+  managementToken?: string;
 }
 
 type Azione =
@@ -36,7 +39,7 @@ type Azione =
   | { tipo: 'scegliOperatore'; operatoreId: string }
   | { tipo: 'scegliGiorno'; giorno: GiornoPrenotabile }
   | { tipo: 'scegliSlot'; slot: FreeSlot }
-  | { tipo: 'confermato' }
+  | { tipo: 'confermato'; managementToken?: string }
   | { tipo: 'indietro' }
   | { tipo: 'slotConteso' };
 
@@ -55,7 +58,7 @@ function riduci(stato: Stato, azione: Azione): Stato {
     case 'scegliSlot':
       return { ...stato, passo: 'dati', slot: azione.slot };
     case 'confermato':
-      return { ...stato, passo: 'fatto' };
+      return { ...stato, passo: 'fatto', managementToken: azione.managementToken };
     case 'slotConteso':
       return { ...stato, passo: 'quando', slot: undefined };
     case 'indietro':
@@ -75,8 +78,85 @@ function riduci(stato: Stato, azione: Azione): Stato {
 const euro = (cents: number) =>
   (cents / 100).toLocaleString('it-IT', { style: 'currency', currency: 'EUR' });
 
+// Collegamento pre-compilato (es. dopo un annullamento, per proporre nuovi
+// orari): ?servizio=<id>&operatore=<id>&giorno=YYYY-MM-DD&suggeriti=iso,iso.
+// Se servizio/operatore non sono coerenti con i dati del salone, si ignora
+// e si parte dal primo passo come sempre.
+function statoDaIndirizzo(dati: DatiSalone, parametri: URLSearchParams): Stato {
+  const servizioId = parametri.get('servizio');
+  const operatoreId = parametri.get('operatore');
+  if (!servizioId || !operatoreId) return { passo: 'servizio' };
+  const servizioValido = dati.servizi.some((s) => s.id === servizioId);
+  const coppiaValida = dati.operatoreServizi.some(
+    (os) => os.service_id === servizioId && os.operator_id === operatoreId,
+  );
+  if (!servizioValido || !coppiaValida) return { passo: 'servizio' };
+  return { passo: 'quando', servizioId, operatoreId };
+}
+
+interface DatiPrecompilati {
+  nome: string;
+  cognome: string;
+  prefisso: string;
+  telefono: string;
+  email: string;
+}
+
+// Divide un numero in E.164 (es. "+393331234567", già a sistema) nel
+// prefisso e nella parte locale che il form usa in due campi separati.
+function scindiTelefono(e164: string): { prefisso: string; locale: string } {
+  const corrispondenza = [...PREFISSI]
+    .sort((a, b) => b.code.length - a.code.length)
+    .find((p) => e164.startsWith(p.code));
+  if (!corrispondenza) return { prefisso: '+39', locale: e164 };
+  return { prefisso: corrispondenza.code, locale: e164.slice(corrispondenza.code.length).trim() };
+}
+
+// Dopo un annullamento del salone, il link di riproposta include anche
+// i dati del cliente già a sistema (sezione 3 del brief: nessuna
+// frizione in più per un semplice cambio orario). Restano campi normali
+// del form, che il cliente può comunque correggere.
+function precompilatoDaIndirizzo(parametri: URLSearchParams): DatiPrecompilati | undefined {
+  const nome = parametri.get('nome');
+  const telefono = parametri.get('telefono');
+  if (!nome || !telefono) return undefined;
+  const { prefisso, locale } = scindiTelefono(telefono);
+  return {
+    nome,
+    cognome: parametri.get('cognome') ?? '',
+    prefisso,
+    telefono: locale,
+    email: parametri.get('email') ?? '',
+  };
+}
+
 export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
-  const [stato, dispatch] = useReducer(riduci, { passo: 'servizio' });
+  const parametri = useSearchParams();
+  const [stato, dispatch] = useReducer(riduci, undefined, () => statoDaIndirizzo(dati, parametri));
+  const [suggeriti] = useState(() => new Set(parametri.get('suggeriti')?.split(',').filter(Boolean) ?? []));
+  const [precompilato] = useState(() => precompilatoDaIndirizzo(parametri));
+
+  // Se l'indirizzo indica anche un giorno, lo selezioniamo subito: il
+  // cliente vede già gli orari suggeriti, invece di dover ricliccare la
+  // striscia dei giorni. Fatto in un effetto (non nell'inizializzazione
+  // dello stato) perché il "giorno" della UI incorpora un'etichetta e un
+  // controllo di validità che vale la pena calcolare una sola volta.
+  useEffect(() => {
+    const giornoParam = parametri.get('giorno');
+    if (!giornoParam) return;
+    const g = DateTime.fromISO(giornoParam, { zone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    if (!g.isValid) return;
+    dispatch({
+      tipo: 'scegliGiorno',
+      giorno: {
+        data: giornoParam,
+        weekday: g.weekday % 7,
+        etichetta: g.setLocale('it').toFormat('ccc d LLLL'),
+        disponibile: true,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const servizio = dati.servizi.find((s) => s.id === stato.servizioId);
   const operatore = dati.operatori.find((o) => o.id === stato.operatoreId);
@@ -123,7 +203,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
                     operatoreUnicoId: ops.length === 1 ? ops[0].id : undefined,
                   })
                 }
-                className="flex w-full items-baseline justify-between rounded-xl border border-sabbia bg-white/60 px-4 py-3 text-left transition hover:border-terracotta disabled:opacity-40"
+                className="flex w-full items-baseline justify-between rounded-xl border border-sabbia bg-carta/60 px-4 py-3 text-left transition hover:border-terracotta disabled:opacity-40"
               >
                 <span className="font-medium">{s.name}</span>
                 <span className="font-mono text-sm text-inchiostro/60">
@@ -141,7 +221,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             <button
               key={o.id}
               onClick={() => dispatch({ tipo: 'scegliOperatore', operatoreId: o.id })}
-              className="w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 text-left font-medium transition hover:border-terracotta"
+              className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 text-left font-medium transition hover:border-terracotta"
             >
               {o.name}
             </button>
@@ -163,6 +243,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
               operatorId={stato.operatoreId}
               serviceId={stato.servizioId}
               data={stato.giorno.data}
+              suggeriti={suggeriti}
               onScegli={(slot) => dispatch({ tipo: 'scegliSlot', slot })}
             />
           )}
@@ -177,7 +258,8 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             operatorId={stato.operatoreId}
             serviceId={stato.servizioId}
             slot={stato.slot}
-            onConfermato={() => dispatch({ tipo: 'confermato' })}
+            precompilato={precompilato}
+            onConfermato={(managementToken) => dispatch({ tipo: 'confermato', managementToken })}
             onSlotConteso={() => dispatch({ tipo: 'slotConteso' })}
           />
         </Sezione>
@@ -193,6 +275,20 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             {operatore ? ` con ${operatore.name}` : ''}.
           </p>
           <p className="mt-1 text-sm text-crema/60">Ti aspettiamo.</p>
+          <AggiungiAlCalendario
+            titolo={`${servizio.name} · ${dati.tenant.name}`}
+            descrizione={
+              `Appuntamento per ${servizio.name}` +
+              (operatore ? ` con ${operatore.name}` : '') +
+              ` da ${dati.tenant.name}.` +
+              (stato.managementToken
+                ? ` Gestisci la prenotazione: ${typeof window !== 'undefined' ? window.location.origin : ''}/prenotazione/${stato.managementToken}`
+                : '')
+            }
+            inizio={stato.slot.start}
+            durataMinuti={servizio.duration_minutes}
+          />
+          {stato.managementToken && <LinkGestione token={stato.managementToken} />}
         </div>
       )}
     </div>
@@ -229,7 +325,8 @@ function Riepilogo(props: {
   );
 }
 
-function StrisciaGiorni(props: {
+// Esportati: riusati anche in /prenotazione/[token] per il cambio orario.
+export function StrisciaGiorni(props: {
   horizonDays: number;
   weekdayDisponibili: number[];
   selezionato?: string;
@@ -259,7 +356,7 @@ function StrisciaGiorni(props: {
           className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
             props.selezionato === g.data
               ? 'border-terracotta bg-terracotta font-medium text-crema'
-              : 'border-sabbia bg-white/60 hover:border-terracotta'
+              : 'border-sabbia bg-carta/60 hover:border-terracotta'
           }`}
         >
           {g.etichetta}
@@ -269,11 +366,13 @@ function StrisciaGiorni(props: {
   );
 }
 
-function SceltaOrario(props: {
+export function SceltaOrario(props: {
   tenantSlug: string;
   operatorId: string;
   serviceId: string;
   data: string;
+  /** Orari (ISO) che il salone ha proposto: evidenziati nella griglia. */
+  suggeriti?: Set<string>;
   onScegli: (slot: FreeSlot) => void;
 }) {
   const [slots, setSlots] = useState<FreeSlot[] | null>(null);
@@ -314,15 +413,27 @@ function SceltaOrario(props: {
       <div>
         <p className="mb-1 text-xs uppercase tracking-wide text-inchiostro/50">{titolo}</p>
         <div className="grid grid-cols-4 gap-2">
-          {lista.map((slot) => (
-            <button
-              key={slot.start}
-              onClick={() => props.onScegli(slot)}
-              className="rounded-xl border border-sabbia bg-white/60 py-2 font-mono text-sm transition hover:border-terracotta"
-            >
-              {slot.label}
-            </button>
-          ))}
+          {lista.map((slot) => {
+            const consigliato = props.suggeriti?.has(slot.start);
+            return (
+              <button
+                key={slot.start}
+                onClick={() => props.onScegli(slot)}
+                className={`relative rounded-xl border py-2 font-mono text-sm transition ${
+                  consigliato
+                    ? 'border-terracotta bg-terracotta/10 font-medium'
+                    : 'border-sabbia bg-carta/60 hover:border-terracotta'
+                }`}
+              >
+                {consigliato && (
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-terracotta px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-crema">
+                    Consigliato
+                  </span>
+                )}
+                {slot.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -364,7 +475,8 @@ function FormDati(props: {
   operatorId: string;
   serviceId: string;
   slot: FreeSlot;
-  onConfermato: () => void;
+  precompilato?: DatiPrecompilati;
+  onConfermato: (managementToken?: string) => void;
   onSlotConteso: () => void;
 }) {
   const [invio, setInvio] = useState(false);
@@ -393,7 +505,8 @@ function FormDati(props: {
         }),
       });
       if (res.ok) {
-        props.onConfermato();
+        const json = await res.json().catch(() => ({}));
+        props.onConfermato(json.managementToken);
         return;
       }
       const json = await res.json().catch(() => ({}));
@@ -411,20 +524,32 @@ function FormDati(props: {
   }
 
   const campo =
-    'w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 outline-none transition focus:border-terracotta';
+    'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
 
   return (
     <form onSubmit={invia} className="space-y-3">
       <div className="flex gap-3">
-        <input name="nome" required placeholder="Nome" className={campo} />
-        <input name="cognome" required placeholder="Cognome" className={campo} />
+        <input
+          name="nome"
+          required
+          placeholder="Nome"
+          defaultValue={props.precompilato?.nome}
+          className={campo}
+        />
+        <input
+          name="cognome"
+          required
+          placeholder="Cognome"
+          defaultValue={props.precompilato?.cognome}
+          className={campo}
+        />
       </div>
       <div className="flex gap-3">
         <select
           name="prefisso"
-          defaultValue="+39"
+          defaultValue={props.precompilato?.prefisso ?? '+39'}
           aria-label="Prefisso internazionale"
-          className="shrink-0 rounded-xl border border-sabbia bg-white/60 px-3 py-3 font-mono text-sm outline-none transition focus:border-terracotta"
+          className="shrink-0 rounded-xl border border-sabbia bg-carta/60 px-3 py-3 font-mono text-sm outline-none transition focus:border-terracotta"
         >
           {PREFISSI.map((p) => (
             <option key={p.code} value={p.code}>
@@ -437,10 +562,17 @@ function FormDati(props: {
           required
           type="tel"
           placeholder="Cellulare (es. 333 123 4567)"
+          defaultValue={props.precompilato?.telefono}
           className={campo}
         />
       </div>
-      <input name="email" type="email" placeholder="Email (facoltativa)" className={campo} />
+      <input
+        name="email"
+        type="email"
+        placeholder="Email (facoltativa)"
+        defaultValue={props.precompilato?.email}
+        className={campo}
+      />
       {/* Honeypot: invisibile agli umani, irresistibile per i bot. */}
       <input
         name="website"
@@ -462,5 +594,106 @@ function FormDati(props: {
         l’appuntamento.
       </p>
     </form>
+  );
+}
+
+function LinkGestione({ token }: { token: string }) {
+  const [copiato, setCopiato] = useState(false);
+  const link = `${typeof window !== 'undefined' ? window.location.origin : ''}/prenotazione/${token}`;
+
+  async function copia() {
+    await navigator.clipboard.writeText(link);
+    setCopiato(true);
+    setTimeout(() => setCopiato(false), 2000);
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border-2 border-terracotta bg-terracotta/10 p-4">
+      <p className="text-sm font-semibold text-crema">
+        ⚠️ Salva questo link: è l'unico modo per annullare o cambiare orario.
+      </p>
+      <button
+        onClick={copia}
+        className="mt-2.5 w-full rounded-xl bg-terracotta py-2.5 text-sm font-semibold text-crema transition hover:opacity-90"
+      >
+        {copiato ? 'Copiato ✓' : '🔗 Copia il link della prenotazione'}
+      </button>
+    </div>
+  );
+}
+
+const formattaICS = (d: DateTime) => d.toUTC().toFormat("yyyyMMdd'T'HHmmss'Z'");
+
+const escapeICS = (testo: string) =>
+  testo.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+
+// "Aggiungi al calendario": Google Calendar via link (nessun file, apre
+// direttamente); per Apple/Outlook/altri si genera un .ics al volo nel
+// browser, senza nessuna rotta né dato aggiuntivo sul server — nessun
+// luogo (non ancora un campo del salone), solo titolo, orario e link di
+// gestione nella descrizione.
+function AggiungiAlCalendario(props: {
+  titolo: string;
+  descrizione: string;
+  inizio: string;
+  durataMinuti: number;
+}) {
+  const inizio = DateTime.fromISO(props.inizio);
+  const fine = inizio.plus({ minutes: props.durataMinuti });
+
+  const googleUrl = (() => {
+    const parametri = new URLSearchParams({
+      action: 'TEMPLATE',
+      text: props.titolo,
+      dates: `${formattaICS(inizio)}/${formattaICS(fine)}`,
+      details: props.descrizione,
+    });
+    return `https://calendar.google.com/calendar/render?${parametri.toString()}`;
+  })();
+
+  function scaricaIcs() {
+    const contenuto = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Puntuale//Prenotazioni//IT',
+      'BEGIN:VEVENT',
+      `UID:${crypto.randomUUID()}@puntuale.app`,
+      `DTSTAMP:${formattaICS(DateTime.utc())}`,
+      `DTSTART:${formattaICS(inizio)}`,
+      `DTEND:${formattaICS(fine)}`,
+      `SUMMARY:${escapeICS(props.titolo)}`,
+      `DESCRIPTION:${escapeICS(props.descrizione)}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const blob = new Blob([contenuto], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'appuntamento.ics';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="mt-4">
+      <p className="text-xs text-crema/60">Aggiungi il promemoria al calendario:</p>
+      <div className="mt-1.5 flex gap-2">
+        <a
+          href={googleUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex-1 rounded-xl border border-crema/30 py-2 text-center text-sm font-medium transition hover:bg-crema/10"
+        >
+          📅 Google Calendar
+        </a>
+        <button
+          onClick={scaricaIcs}
+          className="flex-1 rounded-xl border border-crema/30 py-2 text-sm font-medium transition hover:bg-crema/10"
+        >
+          📥 Apple / Outlook
+        </button>
+      </div>
+    </div>
   );
 }

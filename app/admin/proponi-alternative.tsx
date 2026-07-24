@@ -3,7 +3,11 @@
 // Dopo un annullamento, il salone propone al cliente orari alternativi:
 // il sistema cerca i primi posti liberi equivalenti (stesso servizio e
 // operatore, giorni successivi), l'esercente SCEGLIE quali proporre e
-// invia il messaggio già scritto via WhatsApp (o lo copia per un SMS).
+// invia un messaggio con un collegamento al widget pubblico, già aperto
+// su quel servizio/operatore e con gli orari scelti evidenziati: il
+// cliente può accettarne uno o sfogliarne altri da solo, con lo stesso
+// widget che userebbe per una prenotazione normale — nessun nuovo
+// sistema di gettoni, si riusa quello che c'è già.
 // Dalla Fase 3 (promemoria) lo stesso invio diventerà automatico.
 
 import { useEffect, useMemo, useState } from 'react';
@@ -23,7 +27,9 @@ export function ProponiAlternative(props: {
   servizioNome: string;
   operatoreId: string;
   clienteNome: string;
+  clienteCognome: string | null;
   clienteTelefono: string;
+  clienteEmail: string | null;
   vecchioInizio: string; // ISO dell'appuntamento annullato
   onChiudi: () => void;
 }) {
@@ -68,22 +74,56 @@ export function ProponiAlternative(props: {
     };
   }, [props.salone, props.operatoreId, props.servizioId]);
 
+  // Collegamento al widget: pre-compilato su servizio e operatore, e con
+  // i dati del cliente già a sistema (nome, telefono, email) così non
+  // deve reinserirli: il salone li conosce già, è solo un cambio orario
+  // dello stesso appuntamento. Restano comunque campi normali del form,
+  // modificabili dal cliente. Se c'è almeno una proposta scelta, il
+  // link apre già il giorno della prima e evidenzia tutte quelle scelte
+  // come "Consigliato".
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const link = useMemo(() => {
+    const selezionate = (alternative ?? []).filter((a) => scelte.has(a.slot.start));
+    const parametri = new URLSearchParams({
+      servizio: props.servizioId,
+      operatore: props.operatoreId,
+      nome: props.clienteNome,
+      telefono: props.clienteTelefono,
+    });
+    if (props.clienteCognome) parametri.set('cognome', props.clienteCognome);
+    if (props.clienteEmail) parametri.set('email', props.clienteEmail);
+    if (selezionate.length > 0) {
+      const primoGiorno = DateTime.fromISO(selezionate[0].slot.start)
+        .setZone(props.salone.timezone)
+        .toISODate();
+      if (primoGiorno) parametri.set('giorno', primoGiorno);
+      parametri.set('suggeriti', selezionate.map((a) => a.slot.start).join(','));
+    }
+    return `${origin}/${props.salone.slug}?${parametri.toString()}`;
+  }, [
+    alternative,
+    scelte,
+    props.servizioId,
+    props.operatoreId,
+    props.clienteNome,
+    props.clienteCognome,
+    props.clienteTelefono,
+    props.clienteEmail,
+    props.salone,
+    origin,
+  ]);
+
   const messaggio = useMemo(() => {
     const vecchio = DateTime.fromISO(props.vecchioInizio)
       .setZone(props.salone.timezone)
       .setLocale('it');
-    const proposte = (alternative ?? [])
-      .filter((a) => scelte.has(a.slot.start))
-      .map((a) => `• ${a.etichettaGiorno} alle ${a.slot.label}`)
-      .join('\n');
     return (
       `Ciao ${props.clienteNome}, purtroppo dobbiamo spostare il tuo appuntamento ` +
       `"${props.servizioNome}" di ${vecchio.toFormat('ccc d LLLL')} alle ${vecchio.toFormat('HH:mm')}. ` +
-      `Ci scusiamo per il disagio!` +
-      (proposte ? `\n\nPossiamo proporti in alternativa:\n${proposte}\n\nRispondi con l'orario che preferisci e lo fissiamo subito.` : '') +
-      `\n\n${props.salone.name}`
+      `Ci scusiamo per il disagio!\n\n` +
+      `Scegli il tuo nuovo orario qui: ${link}\n\n${props.salone.name}`
     );
-  }, [alternative, scelte, props]);
+  }, [link, props]);
 
   const [copiato, setCopiato] = useState(false);
 
@@ -136,8 +176,8 @@ export function ProponiAlternative(props: {
                 key={a.slot.start}
                 className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
                   scelte.has(a.slot.start)
-                    ? 'border-terracotta bg-white/80'
-                    : 'border-sabbia bg-white/50'
+                    ? 'border-terracotta bg-carta/80'
+                    : 'border-sabbia bg-carta/50'
                 }`}
               >
                 <input
@@ -159,7 +199,7 @@ export function ProponiAlternative(props: {
           readOnly
           value={messaggio}
           rows={7}
-          className="w-full rounded-xl border border-sabbia bg-white/60 px-3 py-2 font-mono text-xs text-inchiostro/80"
+          className="w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 font-mono text-xs text-inchiostro/80"
           aria-label="Messaggio per il cliente"
         />
         <div className="mt-2 flex gap-2">
@@ -173,7 +213,7 @@ export function ProponiAlternative(props: {
           </a>
           <button
             onClick={copia}
-            className="flex-1 rounded-xl border border-terracotta py-2.5 font-semibold text-terracotta transition hover:bg-white/60"
+            className="flex-1 rounded-xl border border-terracotta py-2.5 font-semibold text-terracotta transition hover:bg-carta/60"
           >
             {copiato ? 'Copiato ✓' : 'Copia messaggio'}
           </button>

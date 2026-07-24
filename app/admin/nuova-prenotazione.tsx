@@ -223,7 +223,7 @@ export function NuovaPrenotazione(props: {
                 className={CAMPO}
               />
               {trovati.length > 0 && (
-                <ul className="mt-1 overflow-hidden rounded-xl border border-sabbia bg-white/80">
+                <ul className="mt-1 overflow-hidden rounded-xl border border-sabbia bg-carta/80">
                   {trovati.map((c) => (
                     <li key={c.id}>
                       <button

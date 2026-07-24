@@ -71,7 +71,7 @@ export function SezioneChiusure(props: { salone: Salone; operatori: Operatore[] 
     <section>
       <h2 className="mb-2 font-display text-2xl">Chiusure e ferie</h2>
       {chiusure.length === 0 ? (
-        <p className="rounded-xl bg-white/60 p-4 text-center text-sm text-inchiostro/60">
+        <p className="rounded-xl bg-carta/60 p-4 text-center text-sm text-inchiostro/60">
           Nessuna chiusura in programma.
         </p>
       ) : (
@@ -79,7 +79,7 @@ export function SezioneChiusure(props: { salone: Salone; operatori: Operatore[] 
           {chiusure.map((c) => (
             <li
               key={c.id}
-              className="flex items-baseline justify-between gap-3 rounded-xl border border-sabbia bg-white/60 px-4 py-2.5"
+              className="flex items-baseline justify-between gap-3 rounded-xl border border-sabbia bg-carta/60 px-4 py-2.5"
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">

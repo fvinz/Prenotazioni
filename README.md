@@ -1,4 +1,4 @@
-# Appunto
+# Puntuale
 
 Sistema di prenotazioni multi-tenant per attività su appuntamento
 (parrucchieri, estetiste, barber). Contesto e decisioni di dominio: vedi
@@ -48,4 +48,4 @@ supabase db push
 
 Ogni salone ha la sua pagina di prenotazione su `/{tenantSlug}`
 (servizio → operatore → giorno e orario → dati cliente), con la brand
-identity "Appunto".
+identity "Puntuale".

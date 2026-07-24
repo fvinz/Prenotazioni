@@ -43,7 +43,7 @@ function metricheBase(): Metriche {
 const opzioniBase = {
   ignorati: new Set<string>(),
   hrefRecupero: '/admin/metriche#da-recuperare',
-  urlWidget: 'https://appunto.example/demo',
+  urlWidget: 'https://puntuale.example/demo',
 };
 
 describe('generaConsigli — silenzio quando tutto è nella norma', () => {

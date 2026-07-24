@@ -18,7 +18,7 @@ export interface Salone {
 export type Ruolo = 'owner' | 'staff';
 
 export const CAMPO =
-  'w-full rounded-xl border border-sabbia bg-white/60 px-4 py-3 outline-none transition focus:border-terracotta';
+  'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
 
 /** Guardia di accesso + salone e ruolo dell'utente corrente. */
 export function useSalone() {
@@ -56,10 +56,17 @@ export function useSalone() {
 export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [copiato, setCopiato] = useState(false);
 
   async function esci() {
     await getSupabaseBrowserClient().auth.signOut();
     router.replace('/admin/login');
+  }
+
+  async function copiaLinkWidget() {
+    await navigator.clipboard.writeText(`${window.location.origin}/${salone.slug}`);
+    setCopiato(true);
+    setTimeout(() => setCopiato(false), 2000);
   }
 
   const sezioni = [
@@ -79,13 +86,22 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
       <div className="flex items-baseline justify-between">
         <div>
           <p className="font-display text-2xl">
-            appunto<span className="text-terracotta">.</span>
+            puntuale<span className="text-terracotta">.</span>
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">{salone.name}</h1>
         </div>
-        <button onClick={esci} className="text-sm text-terracotta hover:underline">
-          Esci
-        </button>
+        <div className="flex shrink-0 items-center gap-4">
+          <button
+            onClick={copiaLinkWidget}
+            title="Copia il link pubblico di prenotazione"
+            className="flex items-center gap-1.5 rounded-xl bg-terracotta px-3.5 py-2 text-sm font-semibold text-crema shadow-sm transition hover:opacity-90"
+          >
+            🔗 {copiato ? 'Copiato ✓' : 'Link prenotazioni'}
+          </button>
+          <button onClick={esci} className="text-sm text-inchiostro/50 hover:text-terracotta hover:underline">
+            Esci
+          </button>
+        </div>
       </div>
       <nav className="mt-4 flex gap-2">
         {sezioni.map((s) => {
@@ -97,7 +113,7 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
               className={`rounded-xl px-4 py-1.5 text-sm font-medium transition ${
                 attiva
                   ? 'bg-inchiostro text-crema'
-                  : 'bg-white/60 text-inchiostro hover:bg-sabbia'
+                  : 'bg-carta/60 text-inchiostro hover:bg-sabbia'
               }`}
             >
               {s.label}

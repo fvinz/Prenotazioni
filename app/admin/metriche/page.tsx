@@ -234,7 +234,7 @@ export default function MetricheAdmin() {
             key={p}
             onClick={() => setPeriodo(p)}
             className={`rounded-xl px-3 py-1.5 text-sm font-medium transition ${
-              periodo === p ? 'bg-inchiostro text-crema' : 'bg-white/60 hover:bg-sabbia'
+              periodo === p ? 'bg-inchiostro text-crema' : 'bg-carta/60 hover:bg-sabbia'
             }`}
           >
             {ETICHETTA[p]}
@@ -247,7 +247,7 @@ export default function MetricheAdmin() {
       ) : !dati ? (
         <p className="text-center text-inchiostro/60">Calcolo in corso…</p>
       ) : dati.nAppuntamenti === 0 ? (
-        <p className="rounded-xl bg-white/60 p-6 text-center text-inchiostro/60">
+        <p className="rounded-xl bg-carta/60 p-6 text-center text-inchiostro/60">
           Ancora nessun dato per questo periodo.
         </p>
       ) : (
@@ -441,7 +441,7 @@ export default function MetricheAdmin() {
 
 function Riquadro({ etichetta, valore, accento }: { etichetta: string; valore: string; accento?: boolean }) {
   return (
-    <div className="rounded-xl border border-sabbia bg-white/60 px-4 py-3">
+    <div className="rounded-xl border border-sabbia bg-carta/60 px-4 py-3">
       <p className="text-xs uppercase tracking-wide text-inchiostro/50">{etichetta}</p>
       <p className={`mt-1 font-display text-2xl ${accento ? 'text-terracotta' : ''}`}>{valore}</p>
     </div>
@@ -629,7 +629,7 @@ function ConsiglioCard({
   }
 
   return (
-    <div className={`rounded-xl border bg-white/60 px-4 py-3 ${bordo}`}>
+    <div className={`rounded-xl border bg-carta/60 px-4 py-3 ${bordo}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium">{consiglio.titolo}</p>
@@ -690,7 +690,7 @@ function ConsiglioCard({
             min={0}
             step="0.5"
             defaultValue={azione.prezzoSuggeritoCents / 100}
-            className="w-24 rounded-lg border border-sabbia bg-white/80 px-2 py-1 text-sm"
+            className="w-24 rounded-lg border border-sabbia bg-carta/80 px-2 py-1 text-sm"
             autoFocus
           />
           <button

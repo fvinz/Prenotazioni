@@ -70,7 +70,7 @@ export default function ClientiAdmin() {
       {clienti === null ? (
         <p className="text-center text-inchiostro/60">Un attimo…</p>
       ) : clienti.length === 0 ? (
-        <p className="rounded-xl bg-white/60 p-6 text-center text-inchiostro/60">
+        <p className="rounded-xl bg-carta/60 p-6 text-center text-inchiostro/60">
           {query ? 'Nessun cliente trovato.' : 'Ancora nessun cliente in anagrafica.'}
         </p>
       ) : (
@@ -79,7 +79,7 @@ export default function ClientiAdmin() {
             <li key={c.id}>
               <Link
                 href={`/admin/clienti/${c.id}`}
-                className="flex items-baseline justify-between rounded-xl border border-sabbia bg-white/60 px-4 py-3 transition hover:border-terracotta"
+                className="flex items-baseline justify-between rounded-xl border border-sabbia bg-carta/60 px-4 py-3 transition hover:border-terracotta"
               >
                 <span className="truncate font-medium">
                   {c.first_name} {c.last_name ?? ''}
