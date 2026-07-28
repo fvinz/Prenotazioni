@@ -12,10 +12,25 @@
 // raggiungibile da qui senza cambiare pagina.
 
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import type { Salone } from './comuni';
+
+// Apertura/chiusura del dettaglio prenotazione come vera transizione:
+// il blocco cliccato in griglia "diventa" il pannello (View Transitions
+// API), non due elementi separati che si dissolvono uno nell'altro. Non
+// tutti i browser la supportano (Firefox, in particolare): senza,
+// l'aggiornamento avviene comunque, solo senza morphing — la modale si
+// apre e chiude esattamente come prima.
+function conTransizioneVista(aggiorna: () => void) {
+  if (typeof document === 'undefined' || typeof document.startViewTransition !== 'function') {
+    aggiorna();
+    return;
+  }
+  document.startViewTransition(() => flushSync(aggiorna));
+}
 
 export interface Operatore {
   id: string;
@@ -187,7 +202,8 @@ export function GrigliaAgenda(props: {
         )}
         posizionePx={posizionePx}
         adessoPer={adessoPer}
-        onSelezionaPrenotazione={setDettaglio}
+        dettaglioApertoId={dettaglio?.id ?? null}
+        onSelezionaPrenotazione={(p) => conTransizioneVista(() => setDettaglio(p))}
         onSelezionaSlot={(giornoISO, ora) => apriSlot(opSelezionato.id, opSelezionato.name, giornoISO, ora)}
       />
     ) : (
@@ -202,7 +218,8 @@ export function GrigliaAgenda(props: {
         chiusure={delGiorno(props.chiusure, props.giornoISO, tz)}
         posizionePx={posizionePx}
         adessoPer={adessoPer}
-        onSelezionaPrenotazione={setDettaglio}
+        dettaglioApertoId={dettaglio?.id ?? null}
+        onSelezionaPrenotazione={(p) => conTransizioneVista(() => setDettaglio(p))}
         onSelezionaSlot={(operatorId, operatorNome, ora) =>
           apriSlot(operatorId, operatorNome, props.giornoISO, ora)
         }
@@ -219,10 +236,10 @@ export function GrigliaAgenda(props: {
         <DettaglioPrenotazione
           prenotazione={dettaglio}
           tz={tz}
-          onChiudi={() => setDettaglio(null)}
+          onChiudi={() => conTransizioneVista(() => setDettaglio(null))}
           onCambiaStato={(stato) => {
             props.onCambiaStato(dettaglio, stato);
-            setDettaglio(null);
+            conTransizioneVista(() => setDettaglio(null));
           }}
         />
       )}
@@ -309,6 +326,7 @@ function VistaGiorno(props: {
   chiusure: Chiusura[];
   posizionePx: (iso: string, oraMin: number) => number;
   adessoPer: (giornoISO: string, oraMin: number, oraMax: number) => number | null;
+  dettaglioApertoId: string | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (operatorId: string, operatorNome: string, ora: number) => void;
 }) {
@@ -374,6 +392,7 @@ function VistaGiorno(props: {
               chiusure={props.chiusure.filter((c) => c.operator_id === op.id || c.operator_id === null)}
               posizionePx={(iso) => props.posizionePx(iso, oraMin)}
               adessoOffset={adessoOffset}
+              dettaglioApertoId={props.dettaglioApertoId}
               onSelezionaPrenotazione={props.onSelezionaPrenotazione}
               onSelezionaSlot={(ora) => props.onSelezionaSlot(op.id, op.name, ora)}
             />
@@ -413,6 +432,7 @@ function VistaGiorno(props: {
               )}
               posizionePx={(iso) => props.posizionePx(iso, oraMin)}
               adessoOffset={adessoOffset}
+              dettaglioApertoId={props.dettaglioApertoId}
               onSelezionaPrenotazione={props.onSelezionaPrenotazione}
               onSelezionaSlot={(ora) => props.onSelezionaSlot(opSelezionato.id, opSelezionato.name, ora)}
             />
@@ -438,6 +458,7 @@ function VistaSettimana(props: {
   chiusure: Chiusura[];
   posizionePx: (iso: string, oraMin: number) => number;
   adessoPer: (giornoISO: string, oraMin: number, oraMax: number) => number | null;
+  dettaglioApertoId: string | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (giornoISO: string, ora: number) => void;
 }) {
@@ -494,6 +515,7 @@ function VistaSettimana(props: {
                 chiusure={delGiorno(props.chiusure, giornoISO, props.tz)}
                 posizionePx={(iso) => props.posizionePx(iso, oraMin)}
                 adessoOffset={props.adessoPer(giornoISO, oraMin, oraMax)}
+                dettaglioApertoId={props.dettaglioApertoId}
                 onSelezionaPrenotazione={props.onSelezionaPrenotazione}
                 onSelezionaSlot={(ora) => props.onSelezionaSlot(giornoISO, ora)}
               />
@@ -513,6 +535,7 @@ function ColonnaOperatore(props: {
   chiusure: Chiusura[];
   posizionePx: (iso: string) => number;
   adessoOffset: number | null;
+  dettaglioApertoId: string | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (ora: number) => void;
 }) {
@@ -568,7 +591,14 @@ function ColonnaOperatore(props: {
             className={`absolute left-1 right-1 overflow-hidden rounded-lg border-l-[3px] bg-carta px-2 py-1 text-left shadow-sm transition hover:shadow-md ${stile.bordo} ${
               annullata ? 'opacity-45' : ''
             }`}
-            style={{ top, height: Math.max(bottom - top, 24) }}
+            style={{
+              top,
+              height: Math.max(bottom - top, 24),
+              // Il nome resta sul blocco quando è chiuso; passa al pannello
+              // di dettaglio quando è aperto (mai su entrambi insieme,
+              // altrimenti il browser non sa cosa morphare in cosa).
+              viewTransitionName: props.dettaglioApertoId === p.id ? undefined : `prenotazione-${p.id}`,
+            }}
           >
             {completata && (
               <span className="absolute right-1 top-1 text-[10px] font-bold text-buono">✓</span>
@@ -614,6 +644,7 @@ function DettaglioPrenotazione(props: {
     >
       <div
         className="anima-arrivo w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        style={{ viewTransitionName: `prenotazione-${p.id}` }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-baseline justify-between gap-3">
