@@ -36,6 +36,14 @@ const ETICHETTA_SCHEDA: Record<Scheda, string> = {
 
 const euro = (cents: number) =>
   (cents / 100).toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+// Etichetta compatta per le colonne dei grafici, dove "36.550 €" non ci
+// sta: il valore preciso resta comunque nel title al passaggio del mouse.
+const euroCompatto = (cents: number) => {
+  const euri = cents / 100;
+  return euri >= 1000
+    ? `${(euri / 1000).toLocaleString('it-IT', { maximumFractionDigits: 1 })}k`
+    : `${Math.round(euri)}`;
+};
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 const minutiDaOra = (t: string) => {
@@ -379,6 +387,7 @@ export default function MetricheAdmin() {
               <Sezione className="mt-10" titolo="Stagionalità" sottotitolo="Incasso per mese.">
                 <BarreMensili
                   voci={dati.perMese.map((m) => ({ nome: m.etichetta, valore: m.incassoCents }))}
+                  etichettaBarra={euroCompatto}
                 />
               </Sezione>
             </div>
@@ -568,7 +577,12 @@ function Barre({ voci, max }: { voci: { nome: string; valore: number; etichetta:
     <div className="space-y-2">
       {voci.map((v, i) => (
         <div key={i} className="flex items-center gap-3">
-          <span className="w-10 shrink-0 text-sm text-inchiostro/70">{v.nome}</span>
+          <span
+            title={v.nome}
+            className="w-20 shrink-0 truncate text-sm text-inchiostro/70 sm:w-28"
+          >
+            {v.nome}
+          </span>
           <span className="h-5 flex-1 overflow-hidden rounded-md bg-sabbia">
             <span
               className="block h-full rounded-md bg-terracotta"
@@ -584,24 +598,35 @@ function Barre({ voci, max }: { voci: { nome: string; valore: number; etichetta:
   );
 }
 
-// Barre verticali (stagionalità mensile, ore di punta).
+// Barre verticali (stagionalità mensile, ore di punta). Il valore è
+// scritto sopra ogni barra: senza un numero visibile il grafico mostra
+// solo forme relative, non "cosa succede" — passare il mouse per
+// scoprirlo non è un'opzione su schermo touch.
 function BarreMensili({
   voci,
   formato = euro,
+  etichettaBarra,
 }: {
   voci: { nome: string; valore: number }[];
   formato?: (v: number) => string;
+  /** Etichetta breve sopra la barra, se il valore per intero non ci sta. */
+  etichettaBarra?: (v: number) => string;
 }) {
+  const mostra = etichettaBarra ?? formato;
   const max = Math.max(1, ...voci.map((v) => v.valore));
   // L'area delle barre ha un'altezza fissa e propria (items-end da sola
   // non basta: senza un'altezza esplicita sulla colonna, l'altezza in %
   // della barra non ha nulla a cui riferirsi e collassa a 0). Le etichette
-  // vivono in una riga separata sotto, così non intaccano l'altezza dell'area.
+  // dei mesi/ore vivono in una riga separata sotto, così non intaccano
+  // l'altezza dell'area.
   return (
     <div className="overflow-x-auto pb-1">
       <div className="flex items-end gap-1.5" style={{ height: 140 }}>
         {voci.map((v, i) => (
-          <div key={i} className="flex h-full min-w-[28px] flex-1 items-end">
+          <div key={i} className="flex h-full min-w-[36px] flex-1 flex-col items-center justify-end gap-1">
+            <span className="whitespace-nowrap text-[10px] font-medium tabular-nums text-inchiostro/70">
+              {mostra(v.valore)}
+            </span>
             <span
               className="w-full rounded-t-md bg-terracotta"
               style={{ height: `${Math.max(2, (v.valore / max) * 100)}%` }}
@@ -614,7 +639,7 @@ function BarreMensili({
         {voci.map((v, i) => (
           <span
             key={i}
-            className="min-w-[28px] flex-1 whitespace-nowrap text-center text-[10px] capitalize text-inchiostro/50"
+            className="min-w-[36px] flex-1 whitespace-nowrap text-center text-[10px] capitalize text-inchiostro/50"
           >
             {v.nome}
           </span>
