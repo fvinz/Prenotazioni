@@ -277,7 +277,7 @@ function EtichetteOre(props: { oraMin: number; oraMax: number; piccole?: boolean
       {ore.map((ora, i) => (
         <span
           key={ora}
-          className={`absolute right-1 font-mono text-inchiostro/40 ${props.piccole ? 'text-[11px]' : 'text-xs'} ${
+          className={`absolute right-1 font-mono text-inchiostro/40 ${props.piccole ? 'text-2xs' : 'text-xs'} ${
             // Le ore intermedie restano centrate sulla riga; la prima e
             // l'ultima si appoggiano alla riga invece di sporgere fuori
             // dall'area visibile (dove finivano tagliate a metà).
@@ -308,13 +308,13 @@ function SelettoreOperatore(props: {
           }`}
         >
           <span
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-crema ${STILE_OP[i % STILE_OP.length].avatar} ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-crema ${STILE_OP[i % STILE_OP.length].avatar} ${
               props.selezionatoId === op.id ? 'ring-2 ring-terracotta ring-offset-2 ring-offset-crema' : ''
             }`}
           >
             {iniziali(op.name)}
           </span>
-          <span className="text-[11px]">{op.name}</span>
+          <span className="text-2xs">{op.name}</span>
         </button>
       ))}
     </div>
@@ -364,7 +364,7 @@ function VistaGiorno(props: {
               className="sticky top-0 z-10 flex items-center gap-2 border-b border-l border-sabbia bg-crema px-2 py-2.5"
             >
               <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-crema ${STILE_OP[i % STILE_OP.length].avatar}`}
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-2xs font-semibold text-crema ${STILE_OP[i % STILE_OP.length].avatar}`}
               >
                 {iniziali(op.name)}
               </span>
@@ -378,7 +378,7 @@ function VistaGiorno(props: {
               <Link
                 href={`/admin/impostazioni?operatore=${op.id}#orari`}
                 title={`Orari e ferie di ${op.name}`}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sabbia text-[10px] text-inchiostro/50 transition hover:border-terracotta hover:text-terracotta"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sabbia text-2xs text-inchiostro/50 transition hover:border-terracotta hover:text-terracotta"
               >
                 ⚙
               </Link>
@@ -504,7 +504,7 @@ function VistaSettimana(props: {
                 key={giornoISO}
                 className="sticky top-0 z-10 border-b border-l border-sabbia bg-crema px-2 py-2 text-center"
               >
-                <p className="font-mono text-[10px] uppercase tracking-wide text-inchiostro/50">
+                <p className="font-mono text-2xs uppercase tracking-wide text-inchiostro/50">
                   {GIORNI_SETTIMANA[g.weekday - 1]}
                 </p>
                 <p className={`text-sm font-semibold ${eOggi ? 'text-terracotta' : ''}`}>{g.day}</p>
@@ -582,7 +582,7 @@ function ColonnaOperatore(props: {
         return (
           <div
             key={c.id}
-            className="pointer-events-none absolute left-1 right-1 flex items-center justify-center rounded-lg bg-sabbia/70 px-1 text-center font-mono text-[10px] uppercase tracking-wide text-inchiostro/50"
+            className="pointer-events-none absolute left-1 right-1 flex items-center justify-center rounded-lg bg-sabbia/70 px-1 text-center font-mono text-2xs uppercase tracking-wide text-inchiostro/50"
             style={{ top, height: Math.max(bottom - top, 20) }}
           >
             {c.reason ?? 'Chiuso'}
@@ -614,11 +614,11 @@ function ColonnaOperatore(props: {
             }}
           >
             {completata && (
-              <span className="absolute right-1 top-1 text-[10px] font-bold text-buono">✓</span>
+              <span className="absolute right-1 top-1 text-2xs font-semibold text-buono">✓</span>
             )}
-            <span className="block truncate text-[11px] font-semibold">{nome}</span>
+            <span className="block truncate text-2xs font-semibold">{nome}</span>
             <span
-              className={`block truncate text-[10px] text-inchiostro/60 ${annullata ? 'line-through' : ''}`}
+              className={`block truncate text-2xs text-inchiostro/60 ${annullata ? 'line-through' : ''}`}
             >
               {p.services?.name ?? 'Servizio'}
             </span>

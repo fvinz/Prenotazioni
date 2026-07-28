@@ -624,7 +624,7 @@ function BarreMensili({
       <div className="flex items-end gap-1.5" style={{ height: 140 }}>
         {voci.map((v, i) => (
           <div key={i} className="flex h-full min-w-[36px] flex-1 flex-col items-center justify-end gap-1">
-            <span className="whitespace-nowrap text-[10px] font-medium tabular-nums text-inchiostro/70">
+            <span className="whitespace-nowrap text-2xs font-medium tabular-nums text-inchiostro/70">
               {mostra(v.valore)}
             </span>
             <span
@@ -639,7 +639,7 @@ function BarreMensili({
         {voci.map((v, i) => (
           <span
             key={i}
-            className="min-w-[36px] flex-1 whitespace-nowrap text-center text-[10px] capitalize text-inchiostro/50"
+            className="min-w-[36px] flex-1 whitespace-nowrap text-center text-2xs capitalize text-inchiostro/50"
           >
             {v.nome}
           </span>

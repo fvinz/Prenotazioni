@@ -20,6 +20,13 @@
   --font-display: 'Gloock', Georgia, serif;
   --font-sans: 'Work Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Sotto text-xs (12px) il ruolo è sempre lo stesso — etichetta densa in
+     uno spazio piccolo (badge, orario, didascalia) — ma prima veniva
+     scritto ogni volta come valore arbitrario diverso (9px, 10px, 11px):
+     uno scalino nominato, non tre numeri a caso. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 0.875rem;
 }
 
 /* Versione scura: segue la preferenza del sistema operativo, nessun
@@ -44,6 +51,14 @@
     --color-op-2: #8aa686;
     --color-op-3: #d1a75f;
     --color-op-4: #c07f91;
+  }
+
+  /* Testo chiaro su fondo scuro appare otticamente più sottile a parità
+     di peso (l'antialiasing "mangia" i tratti in modo diverso rispetto a
+     testo scuro su chiaro): un filo di tracking in più lo compensa,
+     senza toccare i pesi né rifare le dimensioni testo per testo. */
+  body {
+    letter-spacing: 0.005em;
   }
 }
 

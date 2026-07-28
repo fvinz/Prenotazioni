@@ -436,7 +436,7 @@ export function SceltaOrario(props: {
                 }`}
               >
                 {consigliato && (
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-terracotta px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-crema">
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-terracotta px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-crema">
                     Consigliato
                   </span>
                 )}
