@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { calcolaStatCliente, type Prenotazione, type StatCliente } from '@/lib/metriche';
-import { ConfermaAzione, Intestazione, useSalone } from '../../comuni';
+import { ConfermaAzione, ErroreTemporaneo, Intestazione, useErroreTemporaneo, useSalone } from '../../comuni';
 
 interface Cliente {
   id: string;
@@ -52,12 +52,39 @@ export default function SchedaCliente() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [storico, setStorico] = useState<Appuntamento[] | null>(null);
   const [stat, setStat] = useState<StatCliente | null>(null);
+  const [operatori, setOperatori] = useState<{ id: string; name: string }[]>([]);
+  const [servizi, setServizi] = useState<{ id: string; name: string }[]>([]);
   const [note, setNote] = useState('');
   const [salvataggio, setSalvataggio] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [confermaAzione, setConfermaAzione] = useState<{
     bookingId: string;
     stato: 'no_show' | 'cancelled';
   } | null>(null);
+  const [erroreAzione, setErroreAzione] = useErroreTemporaneo();
+
+  // Statistiche derivate dallo storico: pure e locali (calcolaStatCliente
+  // non tocca la rete), così un aggiornamento ottimistico può ricalcolarle
+  // subito invece di aspettare un giro di andata e ritorno col server.
+  const ricalcolaStat = useCallback(
+    (righe: Appuntamento[], ops: { id: string; name: string }[], svc: { id: string; name: string }[]) =>
+      calcolaStatCliente({
+        now: DateTime.now().toISO()!,
+        operatori: ops,
+        servizi: svc,
+        bookings: righe.map(
+          (b): Prenotazione => ({
+            operatorId: b.operator_id,
+            serviceId: b.service_id,
+            customerId: id,
+            startsAt: b.starts_at,
+            endsAt: b.ends_at,
+            status: b.status as Prenotazione['status'],
+            priceCents: b.price_cents,
+          }),
+        ),
+      }),
+    [id],
+  );
 
   const carica = useCallback(async () => {
     if (!salone) return;
@@ -79,26 +106,13 @@ export default function SchedaCliente() {
     setCliente((clienteRes.data ?? null) as Cliente | null);
     setNote(clienteRes.data?.notes ?? '');
     const righe = (storicoRes.data ?? []) as unknown as Appuntamento[];
+    const ops = opsRes.data ?? [];
+    const svc = svcRes.data ?? [];
+    setOperatori(ops);
+    setServizi(svc);
     setStorico(righe);
-    setStat(
-      calcolaStatCliente({
-        now: DateTime.now().toISO()!,
-        operatori: opsRes.data ?? [],
-        servizi: svcRes.data ?? [],
-        bookings: righe.map(
-          (b): Prenotazione => ({
-            operatorId: b.operator_id,
-            serviceId: b.service_id,
-            customerId: id,
-            startsAt: b.starts_at,
-            endsAt: b.ends_at,
-            status: b.status as Prenotazione['status'],
-            priceCents: b.price_cents,
-          }),
-        ),
-      }),
-    );
-  }, [supabase, salone, id]);
+    setStat(ricalcolaStat(righe, ops, svc));
+  }, [supabase, salone, id, ricalcolaStat]);
 
   useEffect(() => {
     carica();
@@ -113,11 +127,21 @@ export default function SchedaCliente() {
   }
 
   async function eseguiCambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: stato })
-      .eq('id', bookingId);
-    if (!error) carica();
+    if (!storico) return;
+    const precedente = storico;
+    // Ottimistico: lo storico (e le statistiche che ne derivano, es. il
+    // tasso di no-show) cambiano subito; se il server rifiuta si torna
+    // indietro e lo si segnala con un banner temporaneo.
+    const aggiornato = storico.map((a) => (a.id === bookingId ? { ...a, status: stato } : a));
+    setStorico(aggiornato);
+    setStat(ricalcolaStat(aggiornato, operatori, servizi));
+
+    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', bookingId);
+    if (error) {
+      setStorico(precedente);
+      setStat(ricalcolaStat(precedente, operatori, servizi));
+      setErroreAzione('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
+    }
   }
 
   async function salvaNote() {
@@ -302,6 +326,8 @@ export default function SchedaCliente() {
           }}
         />
       )}
+
+      <ErroreTemporaneo messaggio={erroreAzione} />
     </main>
   );
 }

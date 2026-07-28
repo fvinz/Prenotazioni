@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
-import { ConfermaAzione, Intestazione, useSalone } from './comuni';
+import { ConfermaAzione, ErroreTemporaneo, Intestazione, useErroreTemporaneo, useSalone } from './comuni';
 import { NuovaPrenotazione } from './nuova-prenotazione';
 import { ProponiAlternative } from './proponi-alternative';
 import { GrigliaAgenda, type Chiusura, type Operatore, type Prenotazione } from './griglia-agenda';
@@ -29,6 +29,7 @@ export default function AgendaAdmin() {
     p: Prenotazione;
     stato: 'no_show' | 'cancelled';
   } | null>(null);
+  const [erroreAzione, setErroreAzione] = useErroreTemporaneo();
 
   useEffect(() => {
     if (!salone) return;
@@ -89,14 +90,24 @@ export default function AgendaAdmin() {
   }
 
   async function eseguiCambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
+    const precedente = p.status;
+    // Ottimistico: la griglia cambia subito, prima che il server risponda.
+    // Se il server rifiuta, si torna allo stato precedente e lo si segnala
+    // con un banner temporaneo, senza sostituire tutta la pagina.
+    setPrenotazioni((prev) =>
+      prev ? prev.map((r) => (r.id === p.id ? { ...r, status: stato } : r)) : prev,
+    );
+    // Dopo un annullamento: proponi subito al cliente gli orari alternativi.
+    if (stato === 'cancelled' && p.customers) setProposta(p);
+
     const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', p.id);
     if (error) {
-      setErrore('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
-      return;
+      setPrenotazioni((prev) =>
+        prev ? prev.map((r) => (r.id === p.id ? { ...r, status: precedente } : r)) : prev,
+      );
+      if (stato === 'cancelled') setProposta(null);
+      setErroreAzione('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
     }
-    // Dopo un annullamento: proponi al cliente gli orari alternativi.
-    if (stato === 'cancelled' && p.customers) setProposta(p);
-    carica();
   }
 
   if (erroreAccesso || errore) {
@@ -246,6 +257,8 @@ export default function AgendaAdmin() {
           }}
         />
       )}
+
+      <ErroreTemporaneo messaggio={erroreAzione} />
     </main>
   );
 }

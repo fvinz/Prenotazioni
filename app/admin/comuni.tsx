@@ -186,3 +186,31 @@ export function ConfermaAzione(props: {
     </div>
   );
 }
+
+/**
+ * Messaggio di errore che appare come banner in basso e sparisce da solo:
+ * per quando un aggiornamento ottimistico (lo schermo cambia subito, prima
+ * della risposta del server) viene rifiutato e va segnalato senza
+ * sostituire tutta la pagina, come farebbe un errore di caricamento.
+ */
+export function useErroreTemporaneo() {
+  const [messaggio, setMessaggio] = useState<string | null>(null);
+  useEffect(() => {
+    if (!messaggio) return;
+    const timer = setTimeout(() => setMessaggio(null), 4000);
+    return () => clearTimeout(timer);
+  }, [messaggio]);
+  return [messaggio, setMessaggio] as const;
+}
+
+export function ErroreTemporaneo({ messaggio }: { messaggio: string | null }) {
+  if (!messaggio) return null;
+  return (
+    <div
+      role="alert"
+      className="anima-arrivo fixed inset-x-4 bottom-4 z-40 mx-auto max-w-sm rounded-xl bg-inchiostro px-4 py-3 text-center text-sm text-crema shadow-lg sm:inset-x-0"
+    >
+      {messaggio}
+    </div>
+  );
+}
