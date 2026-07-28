@@ -335,7 +335,7 @@ export default function MetricheAdmin() {
           </div>
 
           {scheda === 'andamento' && (
-            <>
+            <div key="andamento" className="anima-arrivo space-y-8">
               {/* Riempimento per giorno */}
               <Sezione titolo="Riempimento per giorno" sottotitolo="Ore occupate sulle ore disponibili.">
                 <Barre
@@ -362,11 +362,11 @@ export default function MetricheAdmin() {
                   voci={dati.perMese.map((m) => ({ nome: m.etichetta, valore: m.incassoCents }))}
                 />
               </Sezione>
-            </>
+            </div>
           )}
 
           {scheda === 'resa' && (
-            <>
+            <div key="resa" className="anima-arrivo space-y-8">
               {/* Resa per servizio */}
               <Sezione titolo="Resa per servizio" sottotitolo="Incasso e numero di appuntamenti.">
                 <Barre
@@ -432,11 +432,11 @@ export default function MetricheAdmin() {
                   max={Math.max(1, ...dati.perCanale.map((c) => c.n))}
                 />
               </Sezione>
-            </>
+            </div>
           )}
 
           {scheda === 'clienti' && (
-            <>
+            <div key="clienti" className="anima-arrivo space-y-8">
               {/* Migliori clienti */}
               <Sezione titolo="Migliori clienti" sottotitolo="Per valore nel periodo.">
                 <ElencoClienti
@@ -487,7 +487,7 @@ export default function MetricheAdmin() {
                   />
                 </Sezione>
               )}
-            </>
+            </div>
           )}
         </div>
       )}

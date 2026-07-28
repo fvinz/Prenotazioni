@@ -151,27 +151,37 @@ function Contenuto() {
           </div>
 
           {scheda === 'servizi' && (
-            <SezioneServizi
-              salone={salone}
-              servizi={servizi}
-              operatori={operatori}
-              coppie={coppie}
-              onRicarica={ricarica}
-            />
+            <div key="servizi" className="anima-arrivo">
+              <SezioneServizi
+                salone={salone}
+                servizi={servizi}
+                operatori={operatori}
+                coppie={coppie}
+                onRicarica={ricarica}
+              />
+            </div>
           )}
           {scheda === 'team' && (
-            <SezioneTeam salone={salone} operatori={operatori} onRicarica={ricarica} />
+            <div key="team" className="anima-arrivo">
+              <SezioneTeam salone={salone} operatori={operatori} onRicarica={ricarica} />
+            </div>
           )}
           {scheda === 'orari' && (
-            <SezioneOrari
-              salone={salone}
-              operatori={operatori}
-              fasce={fasce}
-              operatorePreselezionato={operatorePreselezionato}
-              onRicarica={ricarica}
-            />
+            <div key="orari" className="anima-arrivo">
+              <SezioneOrari
+                salone={salone}
+                operatori={operatori}
+                fasce={fasce}
+                operatorePreselezionato={operatorePreselezionato}
+                onRicarica={ricarica}
+              />
+            </div>
           )}
-          {scheda === 'chiusure' && <SezioneChiusure salone={salone} operatori={operatori} />}
+          {scheda === 'chiusure' && (
+            <div key="chiusure" className="anima-arrivo">
+              <SezioneChiusure salone={salone} operatori={operatori} />
+            </div>
+          )}
         </>
       )}
     </main>

@@ -211,7 +211,9 @@ export function GrigliaAgenda(props: {
 
   return (
     <>
-      {contenuto}
+      <div key={props.vista} className="anima-arrivo">
+        {contenuto}
+      </div>
 
       {dettaglio && (
         <DettaglioPrenotazione
@@ -607,11 +609,11 @@ function DettaglioPrenotazione(props: {
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
+      className="anima-dissolvenza fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
       onClick={props.onChiudi}
     >
       <div
-        className="w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        className="anima-arrivo w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -685,12 +687,12 @@ function BloccaFascia(props: {
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
+      className="anima-dissolvenza fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
       onClick={props.onChiudi}
     >
       <form
         onSubmit={submit}
-        className="w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        className="anima-arrivo w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-baseline justify-between">

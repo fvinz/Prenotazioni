@@ -153,14 +153,14 @@ export function ConfermaAzione(props: {
 
   return (
     <div
-      className="fixed inset-0 z-20 flex items-center justify-center bg-inchiostro/40 p-6"
+      className="anima-dissolvenza fixed inset-0 z-20 flex items-center justify-center bg-inchiostro/40 p-6"
       onClick={props.onAnnulla}
     >
       <div
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="conferma-azione-titolo"
-        className="w-full max-w-sm rounded-2xl bg-crema p-5 shadow-lg"
+        className="anima-arrivo w-full max-w-sm rounded-2xl bg-crema p-5 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="conferma-azione-titolo" className="font-display text-xl">

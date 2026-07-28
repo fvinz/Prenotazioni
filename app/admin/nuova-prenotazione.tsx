@@ -166,11 +166,11 @@ export function NuovaPrenotazione(props: {
 
   return (
     <div
-      className="fixed inset-0 z-10 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
+      className="anima-dissolvenza fixed inset-0 z-10 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
       onClick={props.onChiudi}
     >
       <div
-        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        className="anima-arrivo max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-baseline justify-between">
