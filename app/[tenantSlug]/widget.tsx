@@ -12,6 +12,7 @@ import type { FreeSlot } from '@/lib/slots';
 import {
   giorniPrenotabili,
   raggruppaSlotPerFascia,
+  weekdayAggregati,
   type GiornoPrenotabile,
 } from '@/lib/widget-utils';
 
@@ -28,7 +29,8 @@ type Passo = 'servizio' | 'operatore' | 'quando' | 'dati' | 'fatto';
 interface Stato {
   passo: Passo;
   servizioId?: string;
-  operatoreId?: string;
+  /** undefined = non ancora scelto; null = "chiunque sia libero"; string = un operatore preciso. */
+  operatoreId?: string | null;
   giorno?: GiornoPrenotabile;
   slot?: FreeSlot;
   managementToken?: string;
@@ -37,10 +39,16 @@ interface Stato {
 
 type Azione =
   | { tipo: 'scegliServizio'; servizioId: string; operatoreUnicoId?: string }
-  | { tipo: 'scegliOperatore'; operatoreId: string }
+  | { tipo: 'scegliOperatore'; operatoreId: string | null }
   | { tipo: 'scegliGiorno'; giorno: GiornoPrenotabile }
   | { tipo: 'scegliSlot'; slot: FreeSlot }
-  | { tipo: 'confermato'; managementToken?: string; nomeCliente?: string }
+  | {
+      tipo: 'confermato';
+      managementToken?: string;
+      nomeCliente?: string;
+      /** L'operatore davvero assegnato, se il cliente aveva scelto "chiunque sia libero". */
+      operatoreAssegnatoId?: string;
+    }
   | { tipo: 'indietro' }
   | { tipo: 'slotConteso' };
 
@@ -64,6 +72,9 @@ function riduci(stato: Stato, azione: Azione): Stato {
         passo: 'fatto',
         managementToken: azione.managementToken,
         nomeCliente: azione.nomeCliente,
+        // Se era stato scelto "chiunque sia libero", da qui in poi si
+        // ragiona sull'operatore davvero assegnato dal server.
+        operatoreId: azione.operatoreAssegnatoId ?? stato.operatoreId,
       };
     case 'slotConteso':
       return { ...stato, passo: 'quando', slot: undefined };
@@ -187,7 +198,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
       {stato.passo !== 'servizio' && stato.passo !== 'fatto' && (
         <Riepilogo
           servizio={servizio?.name}
-          operatore={operatore?.name}
+          operatore={stato.operatoreId === null ? 'Chiunque sia libero' : operatore?.name}
           giorno={stato.passo === 'dati' ? stato.giorno?.etichetta : undefined}
           orario={stato.slot?.label}
           onIndietro={() => dispatch({ tipo: 'indietro' })}
@@ -223,6 +234,15 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
 
       {stato.passo === 'operatore' && stato.servizioId && (
         <Sezione titolo="Con chi?">
+          <button
+            onClick={() => dispatch({ tipo: 'scegliOperatore', operatoreId: null })}
+            className="w-full rounded-xl border border-dashed border-sabbia bg-carta/60 px-4 py-3 text-left transition hover:border-terracotta"
+          >
+            <span className="font-medium">Chiunque sia libero</span>
+            <span className="block text-xs font-normal text-inchiostro/50">
+              Vedi tutti gli orari disponibili
+            </span>
+          </button>
           {operatoriPerServizio(stato.servizioId).map((o) => (
             <button
               key={o.id}
@@ -235,11 +255,18 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
         </Sezione>
       )}
 
-      {stato.passo === 'quando' && stato.servizioId && stato.operatoreId && (
+      {stato.passo === 'quando' && stato.servizioId && stato.operatoreId !== undefined && (
         <Sezione titolo="Quando?">
           <StrisciaGiorni
             horizonDays={dati.tenant.horizonDays}
-            weekdayDisponibili={dati.weekdayPerOperatore[stato.operatoreId] ?? []}
+            weekdayDisponibili={
+              stato.operatoreId === null
+                ? weekdayAggregati(
+                    dati.weekdayPerOperatore,
+                    operatoriPerServizio(stato.servizioId).map((o) => o.id),
+                  )
+                : (dati.weekdayPerOperatore[stato.operatoreId] ?? [])
+            }
             selezionato={stato.giorno?.data}
             onScegli={(giorno) => dispatch({ tipo: 'scegliGiorno', giorno })}
           />
@@ -256,7 +283,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
         </Sezione>
       )}
 
-      {stato.passo === 'dati' && stato.servizioId && stato.operatoreId && stato.slot && (
+      {stato.passo === 'dati' && stato.servizioId && stato.operatoreId !== undefined && stato.slot && (
         <Sezione titolo="I tuoi dati">
           <FormDati
             salone={dati.tenant.name}
@@ -265,8 +292,8 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             serviceId={stato.servizioId}
             slot={stato.slot}
             precompilato={precompilato}
-            onConfermato={(managementToken, nomeCliente) =>
-              dispatch({ tipo: 'confermato', managementToken, nomeCliente })
+            onConfermato={(managementToken, nomeCliente, operatoreAssegnatoId) =>
+              dispatch({ tipo: 'confermato', managementToken, nomeCliente, operatoreAssegnatoId })
             }
             onSlotConteso={() => dispatch({ tipo: 'slotConteso' })}
           />
@@ -378,7 +405,8 @@ export function StrisciaGiorni(props: {
 
 export function SceltaOrario(props: {
   tenantSlug: string;
-  operatorId: string;
+  /** null = "chiunque sia libero": /api/slots aggrega tutti gli operatori idonei. */
+  operatorId: string | null;
   serviceId: string;
   data: string;
   /** Orari (ISO) che il salone ha proposto: evidenziati nella griglia. */
@@ -394,10 +422,10 @@ export function SceltaOrario(props: {
     setErrore(false);
     const qs = new URLSearchParams({
       tenantSlug: props.tenantSlug,
-      operatorId: props.operatorId,
       serviceId: props.serviceId,
       date: props.data,
     });
+    if (props.operatorId) qs.set('operatorId', props.operatorId);
     fetch(`/api/slots?${qs}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((json) => attivo && setSlots(json.slots))
@@ -482,11 +510,12 @@ const PREFISSI = [
 function FormDati(props: {
   salone: string;
   tenantSlug: string;
-  operatorId: string;
+  /** null = "chiunque sia libero": lo decide create_booking. */
+  operatorId: string | null;
   serviceId: string;
   slot: FreeSlot;
   precompilato?: DatiPrecompilati;
-  onConfermato: (managementToken?: string, nomeCliente?: string) => void;
+  onConfermato: (managementToken?: string, nomeCliente?: string, operatoreAssegnatoId?: string) => void;
   onSlotConteso: () => void;
 }) {
   const [invio, setInvio] = useState(false);
@@ -517,7 +546,7 @@ function FormDati(props: {
       });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        props.onConfermato(json.managementToken, nome || undefined);
+        props.onConfermato(json.managementToken, nome || undefined, json.operatorId || undefined);
         return;
       }
       const json = await res.json().catch(() => ({}));

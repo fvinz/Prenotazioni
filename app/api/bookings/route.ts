@@ -10,9 +10,10 @@
 //   - mappatura degli errori in risposte HTTP con messaggi già in
 //     italiano (sono quelli sollevati da create_booking).
 //
-//  Body JSON: { tenantSlug, operatorId, serviceId, startsAt (ISO),
-//              nome, cognome, prefisso? (es. '+39'), telefono,
-//              email?, website? }
+//  Body JSON: { tenantSlug, operatorId (assente/vuoto = "chiunque sia
+//              libero", l'assegnazione la decide create_booking),
+//              serviceId, startsAt (ISO), nome, cognome,
+//              prefisso? (es. '+39'), telefono, email?, website? }
 // =====================================================================
 
 import { NextResponse } from 'next/server';
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  if (!tenantSlug || !operatorId || !serviceId || !startsAt || !nome?.trim() || !cognome?.trim() || !telefono?.trim()) {
+  if (!tenantSlug || !serviceId || !startsAt || !nome?.trim() || !cognome?.trim() || !telefono?.trim()) {
     return NextResponse.json(
       { error: 'Compila tutti i campi obbligatori' },
       { status: 400 },
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
   const supabase = getSupabaseServerClient();
   const { data, error } = await supabase.rpc('create_booking', {
     p_tenant_slug: tenantSlug,
-    p_operator_id: operatorId,
+    p_operator_id: operatorId || null,
     p_service_id: serviceId,
     p_customer_first_name: nome.trim(),
     p_customer_last_name: cognome.trim(),
@@ -78,12 +79,17 @@ export async function POST(request: Request) {
     );
   }
 
-  // create_booking restituisce una riga (booking_id, management_token):
-  // il gettone serve al cliente per il link "gestisci la tua prenotazione".
-  const riga = (data as { booking_id: string; management_token: string }[] | null)?.[0];
+  // create_booking restituisce una riga (booking_id, management_token,
+  // operator_id): il gettone serve al cliente per il link "gestisci la
+  // tua prenotazione"; l'operatore serve al widget per mostrare chi è
+  // stato assegnato quando il cliente aveva scelto "chiunque sia libero".
+  const riga = (
+    data as { booking_id: string; management_token: string; operator_id: string }[] | null
+  )?.[0];
   return NextResponse.json({
     ok: true,
     bookingId: riga?.booking_id,
     managementToken: riga?.management_token,
+    operatorId: riga?.operator_id,
   });
 }
