@@ -15,3 +15,6 @@ out/
 next-env.d.ts
 .DS_Store
 coverage/
+
+# Impostazioni locali di Claude Code (hook personali, non condivisi)
+.claude/settings.local.json
