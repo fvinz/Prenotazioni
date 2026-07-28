@@ -298,7 +298,11 @@ function SelettoreOperatore(props: {
   onSeleziona: (id: string) => void;
 }) {
   return (
-    <div className="mb-3 flex gap-3 overflow-x-auto pb-1">
+    // overflow-x-auto forza anche l'asse verticale a "auto" (comportamento
+    // dello standard CSS quando solo un asse è scrollabile): senza un po'
+    // di spazio verticale, l'anello di selezione (ring-offset-2 + ring-2,
+    // ~4px oltre il cerchio) veniva tagliato in alto.
+    <div className="-mx-1.5 mb-3 flex gap-3 overflow-x-auto p-1.5">
       {props.operatori.map((op, i) => (
         <button
           key={op.id}
