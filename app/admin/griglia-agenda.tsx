@@ -228,7 +228,7 @@ export function GrigliaAgenda(props: {
 
   return (
     <>
-      <div key={props.vista} className="anima-arrivo">
+      <div key={props.vista} className="anima-arrivo flex h-full min-h-0 flex-col">
         {contenuto}
       </div>
 
@@ -271,12 +271,18 @@ function finestraOraria(righe: { starts_at: string; ends_at: string }[], tz: str
 
 function EtichetteOre(props: { oraMin: number; oraMax: number; piccole?: boolean }) {
   const ore = Array.from({ length: props.oraMax - props.oraMin + 1 }, (_, i) => props.oraMin + i);
+  const ultimo = ore.length - 1;
   return (
     <div className="relative border-r border-sabbia">
-      {ore.map((ora) => (
+      {ore.map((ora, i) => (
         <span
           key={ora}
-          className={`absolute right-1 -translate-y-1/2 font-mono text-inchiostro/40 ${props.piccole ? 'text-[11px]' : 'text-xs'}`}
+          className={`absolute right-1 font-mono text-inchiostro/40 ${props.piccole ? 'text-[11px]' : 'text-xs'} ${
+            // Le ore intermedie restano centrate sulla riga; la prima e
+            // l'ultima si appoggiano alla riga invece di sporgere fuori
+            // dall'area visibile (dove finivano tagliate a metà).
+            i === 0 ? '' : i === ultimo ? '-translate-y-full' : '-translate-y-1/2'
+          }`}
           style={{ top: (ora - props.oraMin) * PX_ORA }}
         >
           {ora}:00
@@ -337,12 +343,13 @@ function VistaGiorno(props: {
 
   return (
     <>
-      {/* Desktop: un operatore per colonna. Altezza massima legata al
-          viewport: nella finestra oraria di default (9–19) ci sta tutto
+      {/* Desktop: un operatore per colonna. Occupa lo spazio verticale
+          rimasto (assegnato dal genitore, che è un flex column a tutta
+          altezza): nella finestra oraria di default (9–19) ci sta tutto
           senza scorrimento; se la giornata si allunga (appuntamenti fuori
           dall'orario tipico, o schermi bassi) scorre solo la griglia,
           l'intestazione resta visibile. */}
-      <div className="hidden max-h-[calc(100vh-260px)] overflow-auto rounded-xl border border-sabbia md:block">
+      <div className="hidden min-h-0 flex-1 overflow-auto rounded-xl border border-sabbia md:block">
         <div
           className="relative grid min-w-[720px]"
           style={{
@@ -400,23 +407,27 @@ function VistaGiorno(props: {
         </div>
       </div>
 
-      {/* Mobile: selettore di operatore + una colonna sola. */}
-      <div className="md:hidden">
-        <SelettoreOperatore
-          operatori={props.operatori}
-          selezionatoId={props.operatoreSelezionatoId}
-          onSeleziona={props.onSelezionaOperatore}
-        />
-        <div className="mb-2 flex items-center justify-between px-1">
-          <p className="text-sm font-medium">{opSelezionato.name}</p>
-          <Link
-            href={`/admin/impostazioni?operatore=${opSelezionato.id}#orari`}
-            className="text-xs text-inchiostro/50 hover:text-terracotta"
-          >
-            ⚙ Orari e ferie
-          </Link>
+      {/* Mobile: selettore di operatore + una colonna sola. Anche qui,
+          scorre solo la griglia oraria: il selettore e l'intestazione
+          restano fissi in cima. */}
+      <div className="flex h-full min-h-0 flex-col md:hidden">
+        <div className="shrink-0">
+          <SelettoreOperatore
+            operatori={props.operatori}
+            selezionatoId={props.operatoreSelezionatoId}
+            onSeleziona={props.onSelezionaOperatore}
+          />
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="text-sm font-medium">{opSelezionato.name}</p>
+            <Link
+              href={`/admin/impostazioni?operatore=${opSelezionato.id}#orari`}
+              className="text-xs text-inchiostro/50 hover:text-terracotta"
+            >
+              ⚙ Orari e ferie
+            </Link>
+          </div>
         </div>
-        <div className="max-h-[calc(100vh-360px)] overflow-auto rounded-xl border border-sabbia">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-sabbia">
           <div
             className="relative grid min-w-[300px]"
             style={{ gridTemplateColumns: '44px 1fr', height: altezzaGriglia }}
@@ -468,13 +479,15 @@ function VistaSettimana(props: {
   const giorni = Array.from({ length: 7 }, (_, i) => inizioSettimana.plus({ days: i }));
 
   return (
-    <>
-      <SelettoreOperatore
-        operatori={props.operatori}
-        selezionatoId={props.operatoreSelezionatoId}
-        onSeleziona={props.onSelezionaOperatore}
-      />
-      <div className="max-h-[calc(100vh-320px)] overflow-auto rounded-xl border border-sabbia">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0">
+        <SelettoreOperatore
+          operatori={props.operatori}
+          selezionatoId={props.operatoreSelezionatoId}
+          onSeleziona={props.onSelezionaOperatore}
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-sabbia">
         <div
           className="relative grid min-w-[720px]"
           style={{
@@ -523,7 +536,7 @@ function VistaSettimana(props: {
           })}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 

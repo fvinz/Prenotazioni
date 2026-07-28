@@ -128,96 +128,104 @@ export default function AgendaAdmin() {
   const passo = vista === 'settimana' ? { weeks: 1 } : { days: 1 };
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
-      <Intestazione salone={salone} ruolo={ruolo} />
+    <main className="mx-auto flex h-dvh w-full max-w-5xl flex-col px-4 py-8">
+      <div className="shrink-0">
+        <Intestazione salone={salone} ruolo={ruolo} />
 
-      {/* La modalità (Giorno/Settimana) governa cosa significano le frecce
-          e l'etichetta sotto — è la decisione "esterna", quindi precede la
-          riga che dipende da essa invece di condividerne la riga: erano
-          due decisioni diverse stipate nello stesso controllo. Anche il
-          contenitore pieno (bg-sabbia, altrove riservato ad avvisi e
-          riepiloghi) dava a questa barra di navigazione lo stesso peso di
-          un contenuto importante, quando è solo orientamento. */}
-      <div className="mb-3 flex w-fit overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
-        <button
-          onClick={() => setVista('giorno')}
-          className={`px-3 py-1 font-medium transition ${
-            vista === 'giorno' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
-          }`}
-        >
-          Giorno
-        </button>
-        <button
-          onClick={() => setVista('settimana')}
-          className={`px-3 py-1 font-medium transition ${
-            vista === 'settimana' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
-          }`}
-        >
-          Settimana
-        </button>
-      </div>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3 border-b border-sabbia pb-4 text-sm">
-        <button
-          onClick={() => setData(giorno.minus(passo).toISODate()!)}
-          className="font-medium text-terracotta"
-          aria-label={vista === 'settimana' ? 'Settimana precedente' : 'Giorno precedente'}
-        >
-          ←
-        </button>
-        <span className="font-medium capitalize">
-          {vista === 'settimana'
-            ? `${inizioSettimana.setLocale('it').toFormat('d LLL')} – ${fineSettimana.setLocale('it').toFormat('d LLL')}`
-            : giorno.setLocale('it').toFormat('cccc d LLLL')}
-        </span>
-        {data !== oggi && (
+        {/* La modalità (Giorno/Settimana) governa cosa significano le
+            frecce e l'etichetta sotto — è la decisione "esterna", quindi
+            precede la riga che dipende da essa invece di condividerne la
+            riga: erano due decisioni diverse stipate nello stesso
+            controllo. Anche il contenitore pieno (bg-sabbia, altrove
+            riservato ad avvisi e riepiloghi) dava a questa barra di
+            navigazione lo stesso peso di un contenuto importante, quando
+            è solo orientamento. */}
+        <div className="mb-3 flex w-fit overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
           <button
-            onClick={() => setData(oggi)}
-            className="rounded-lg bg-terracotta px-2 py-1 text-xs font-semibold text-crema transition hover:opacity-90"
+            onClick={() => setVista('giorno')}
+            className={`px-3 py-1 font-medium transition ${
+              vista === 'giorno' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+            }`}
           >
-            Oggi
+            Giorno
           </button>
-        )}
-        <input
-          type="date"
-          value={data}
-          onChange={(e) => e.target.value && setData(e.target.value)}
-          className="rounded-lg border border-inchiostro/10 bg-carta/60 px-2 py-1 text-sm"
-          aria-label="Scegli una data"
-        />
+          <button
+            onClick={() => setVista('settimana')}
+            className={`px-3 py-1 font-medium transition ${
+              vista === 'settimana' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+            }`}
+          >
+            Settimana
+          </button>
+        </div>
+
+        <div className="mb-6 flex flex-wrap items-center gap-3 border-b border-sabbia pb-4 text-sm">
+          <button
+            onClick={() => setData(giorno.minus(passo).toISODate()!)}
+            className="font-medium text-terracotta"
+            aria-label={vista === 'settimana' ? 'Settimana precedente' : 'Giorno precedente'}
+          >
+            ←
+          </button>
+          <span className="font-medium capitalize">
+            {vista === 'settimana'
+              ? `${inizioSettimana.setLocale('it').toFormat('d LLL')} – ${fineSettimana.setLocale('it').toFormat('d LLL')}`
+              : giorno.setLocale('it').toFormat('cccc d LLLL')}
+          </span>
+          {data !== oggi && (
+            <button
+              onClick={() => setData(oggi)}
+              className="rounded-lg bg-terracotta px-2 py-1 text-xs font-semibold text-crema transition hover:opacity-90"
+            >
+              Oggi
+            </button>
+          )}
+          <input
+            type="date"
+            value={data}
+            onChange={(e) => e.target.value && setData(e.target.value)}
+            className="rounded-lg border border-inchiostro/10 bg-carta/60 px-2 py-1 text-sm"
+            aria-label="Scegli una data"
+          />
+          <button
+            onClick={() => setData(giorno.plus(passo).toISODate()!)}
+            className="font-medium text-terracotta"
+            aria-label={vista === 'settimana' ? 'Settimana successiva' : 'Giorno successivo'}
+          >
+            →
+          </button>
+        </div>
+
         <button
-          onClick={() => setData(giorno.plus(passo).toISODate()!)}
-          className="font-medium text-terracotta"
-          aria-label={vista === 'settimana' ? 'Settimana successiva' : 'Giorno successivo'}
+          onClick={() => setNuova(true)}
+          className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-4 text-lg font-semibold text-crema shadow-md shadow-terracotta/30 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-terracotta/40 active:translate-y-0"
         >
-          →
+          <span aria-hidden="true" className="text-2xl leading-none">+</span>
+          Nuova prenotazione
         </button>
       </div>
 
-      <button
-        onClick={() => setNuova(true)}
-        className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-4 text-lg font-semibold text-crema shadow-md shadow-terracotta/30 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-terracotta/40 active:translate-y-0"
-      >
-        <span aria-hidden="true" className="text-2xl leading-none">+</span>
-        Nuova prenotazione
-      </button>
-
-      {prenotazioni === null ? (
-        <p className="text-center text-inchiostro/60">Un attimo…</p>
-      ) : (
-        <GrigliaAgenda
-          salone={salone}
-          vista={vista}
-          giornoISO={data}
-          inizioSettimanaISO={inizioSettimana.toISODate()!}
-          oggiISO={oggi}
-          operatori={operatori}
-          prenotazioni={prenotazioni}
-          chiusure={chiusure}
-          onCambiaStato={cambiaStato}
-          onBloccato={carica}
-        />
-      )}
+      {/* Unico riquadro a occupare lo spazio verticale rimasto: solo qui
+          scorre, non nella pagina. L'altezza dell'intestazione sopra può
+          cambiare (è già successo) senza bisogno di ricalcolare nulla. */}
+      <div className="min-h-0 flex-1">
+        {prenotazioni === null ? (
+          <p className="text-center text-inchiostro/60">Un attimo…</p>
+        ) : (
+          <GrigliaAgenda
+            salone={salone}
+            vista={vista}
+            giornoISO={data}
+            inizioSettimanaISO={inizioSettimana.toISODate()!}
+            oggiISO={oggi}
+            operatori={operatori}
+            prenotazioni={prenotazioni}
+            chiusure={chiusure}
+            onCambiaStato={cambiaStato}
+            onBloccato={carica}
+          />
+        )}
+      </div>
 
       {confermaAzione && (
         <ConfermaAzione
