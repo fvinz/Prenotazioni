@@ -179,9 +179,10 @@ export default function AgendaAdmin() {
 
       <button
         onClick={() => setNuova(true)}
-        className="mb-6 w-full rounded-xl bg-terracotta py-3 font-semibold text-crema transition hover:opacity-90"
+        className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-4 text-lg font-semibold text-crema shadow-md shadow-terracotta/30 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-terracotta/40 active:translate-y-0"
       >
-        + Nuova prenotazione
+        <span aria-hidden="true" className="text-2xl leading-none">+</span>
+        Nuova prenotazione
       </button>
 
       {prenotazioni === null ? (
