@@ -302,19 +302,30 @@ export default function MetricheAdmin() {
             </section>
           )}
 
-          {/* Sintesi */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Riquadro etichetta="Incasso" valore={euro(dati.incassoCents)} />
-            <Riquadro etichetta="Appuntamenti" valore={String(dati.nCompletati)} />
-            <Riquadro etichetta="Scontrino medio" valore={euro(dati.scontrinoMedioCents)} />
-            <Riquadro etichetta="Valore medio cliente" valore={euro(dati.valoreMedioClienteCents)} />
-            <Riquadro etichetta="No-show" valore={pct(dati.tassoNoShow)} accento />
-            <Riquadro etichetta="Cancellazioni" valore={pct(dati.tassoCancellazione)} />
-            <Riquadro etichetta="Ore lavorate" valore={`${dati.oreLavorate} h`} />
-            <Riquadro
-              etichetta="Nuovi / di ritorno"
-              valore={`${dati.nuoviClienti} / ${dati.clientiRitorno}`}
-            />
+          {/* Sintesi: l'incasso è il numero che il titolare guarda per
+              primo, quindi ha un pannello suo — con la variazione sul
+              periodo precedente, dato già calcolato ma finora inutilizzato
+              — mentre gli altri restano nella griglia di supporto. */}
+          <div className="space-y-3">
+            <div className="rounded-xl border border-sabbia bg-carta/60 px-5 py-4">
+              <p className="text-xs uppercase tracking-wide text-inchiostro/50">Incasso</p>
+              <p className="mt-1 font-display text-5xl tracking-tight">{euro(dati.incassoCents)}</p>
+              {precedente && precedente.incassoCents > 0 && (
+                <VariazionePeriodo attuale={dati.incassoCents} precedente={precedente.incassoCents} />
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Riquadro etichetta="Appuntamenti" valore={String(dati.nCompletati)} />
+              <Riquadro etichetta="Scontrino medio" valore={euro(dati.scontrinoMedioCents)} />
+              <Riquadro etichetta="Valore medio cliente" valore={euro(dati.valoreMedioClienteCents)} />
+              <Riquadro etichetta="No-show" valore={pct(dati.tassoNoShow)} accento />
+              <Riquadro etichetta="Cancellazioni" valore={pct(dati.tassoCancellazione)} />
+              <Riquadro etichetta="Ore lavorate" valore={`${dati.oreLavorate} h`} />
+              <Riquadro
+                etichetta="Nuovi / di ritorno"
+                valore={`${dati.nuoviClienti} / ${dati.clientiRitorno}`}
+              />
+            </div>
           </div>
 
           {/* Il resto dei dati è raggruppato in schede: tutto insieme
@@ -492,6 +503,17 @@ export default function MetricheAdmin() {
         </div>
       )}
     </main>
+  );
+}
+
+function VariazionePeriodo({ attuale, precedente }: { attuale: number; precedente: number }) {
+  const variazione = Math.round(((attuale - precedente) / precedente) * 100);
+  const positiva = variazione >= 0;
+  return (
+    <p className={`mt-1 text-sm font-medium ${positiva ? 'text-buono' : 'text-terracotta'}`}>
+      {positiva ? '▲' : '▼'} {Math.abs(variazione)}%
+      <span className="ml-1 font-normal text-inchiostro/50">vs periodo precedente</span>
+    </p>
   );
 }
 
