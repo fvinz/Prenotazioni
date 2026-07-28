@@ -32,6 +32,7 @@ interface Stato {
   giorno?: GiornoPrenotabile;
   slot?: FreeSlot;
   managementToken?: string;
+  nomeCliente?: string;
 }
 
 type Azione =
@@ -39,7 +40,7 @@ type Azione =
   | { tipo: 'scegliOperatore'; operatoreId: string }
   | { tipo: 'scegliGiorno'; giorno: GiornoPrenotabile }
   | { tipo: 'scegliSlot'; slot: FreeSlot }
-  | { tipo: 'confermato'; managementToken?: string }
+  | { tipo: 'confermato'; managementToken?: string; nomeCliente?: string }
   | { tipo: 'indietro' }
   | { tipo: 'slotConteso' };
 
@@ -58,7 +59,12 @@ function riduci(stato: Stato, azione: Azione): Stato {
     case 'scegliSlot':
       return { ...stato, passo: 'dati', slot: azione.slot };
     case 'confermato':
-      return { ...stato, passo: 'fatto', managementToken: azione.managementToken };
+      return {
+        ...stato,
+        passo: 'fatto',
+        managementToken: azione.managementToken,
+        nomeCliente: azione.nomeCliente,
+      };
     case 'slotConteso':
       return { ...stato, passo: 'quando', slot: undefined };
     case 'indietro':
@@ -259,7 +265,9 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             serviceId={stato.servizioId}
             slot={stato.slot}
             precompilato={precompilato}
-            onConfermato={(managementToken) => dispatch({ tipo: 'confermato', managementToken })}
+            onConfermato={(managementToken, nomeCliente) =>
+              dispatch({ tipo: 'confermato', managementToken, nomeCliente })
+            }
             onSlotConteso={() => dispatch({ tipo: 'slotConteso' })}
           />
         </Sezione>
@@ -274,7 +282,9 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             {servizio.name} · {stato.giorno.etichetta} alle {stato.slot.label}
             {operatore ? ` con ${operatore.name}` : ''}.
           </p>
-          <p className="mt-1 text-sm text-crema/60">Ti aspettiamo.</p>
+          <p className="mt-1 text-sm text-crema/60">
+            Ti aspettiamo{stato.nomeCliente ? `, ${stato.nomeCliente}` : ''}.
+          </p>
           <AggiungiAlCalendario
             titolo={`${servizio.name} · ${dati.tenant.name}`}
             descrizione={
@@ -476,7 +486,7 @@ function FormDati(props: {
   serviceId: string;
   slot: FreeSlot;
   precompilato?: DatiPrecompilati;
-  onConfermato: (managementToken?: string) => void;
+  onConfermato: (managementToken?: string, nomeCliente?: string) => void;
   onSlotConteso: () => void;
 }) {
   const [invio, setInvio] = useState(false);
@@ -485,6 +495,7 @@ function FormDati(props: {
   async function invia(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const nome = String(form.get('nome') ?? '').trim();
     setInvio(true);
     setErrore(null);
     try {
@@ -506,7 +517,7 @@ function FormDati(props: {
       });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        props.onConfermato(json.managementToken);
+        props.onConfermato(json.managementToken, nome || undefined);
         return;
       }
       const json = await res.json().catch(() => ({}));
