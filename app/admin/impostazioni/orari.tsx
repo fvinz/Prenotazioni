@@ -102,7 +102,7 @@ export function SezioneOrari(props: {
       <select
         value={selezione}
         onChange={(e) => setSelezione(e.target.value)}
-        className="mb-3 w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-2 outline-none transition focus:border-terracotta"
+        className="mb-3 w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-2 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
         aria-label="Operatore"
       >
         <option value={TUTTI}>Tutto il team ({attivi.length} operatori)</option>

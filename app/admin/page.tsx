@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
-import { Intestazione, useSalone } from './comuni';
+import { ConfermaAzione, Intestazione, useSalone } from './comuni';
 import { NuovaPrenotazione } from './nuova-prenotazione';
 import { ProponiAlternative } from './proponi-alternative';
 import { GrigliaAgenda, type Chiusura, type Operatore, type Prenotazione } from './griglia-agenda';
@@ -25,6 +25,10 @@ export default function AgendaAdmin() {
   const [errore, setErrore] = useState<string | null>(null);
   const [nuova, setNuova] = useState(false);
   const [proposta, setProposta] = useState<Prenotazione | null>(null);
+  const [confermaAzione, setConfermaAzione] = useState<{
+    p: Prenotazione;
+    stato: 'no_show' | 'cancelled';
+  } | null>(null);
 
   useEffect(() => {
     if (!salone) return;
@@ -76,14 +80,15 @@ export default function AgendaAdmin() {
     carica();
   }, [carica]);
 
-  async function cambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
-    if (stato !== 'completed') {
-      const domanda =
-        stato === 'cancelled'
-          ? 'Annullare questa prenotazione?'
-          : 'Segnare il cliente come no-show?';
-      if (!window.confirm(domanda)) return;
+  function cambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (stato === 'completed') {
+      eseguiCambiaStato(p, stato);
+      return;
     }
+    setConfermaAzione({ p, stato });
+  }
+
+  async function eseguiCambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
     const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', p.id);
     if (error) {
       setErrore('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
@@ -193,6 +198,23 @@ export default function AgendaAdmin() {
           chiusure={chiusure}
           onCambiaStato={cambiaStato}
           onBloccato={carica}
+        />
+      )}
+
+      {confermaAzione && (
+        <ConfermaAzione
+          titolo={confermaAzione.stato === 'cancelled' ? 'Annullare la prenotazione?' : 'Segnare il no-show?'}
+          messaggio={
+            confermaAzione.stato === 'cancelled'
+              ? 'Il cliente verrà avvisato e potrai proporgli subito un orario alternativo.'
+              : 'Il cliente risulterà non presentato per questo appuntamento.'
+          }
+          testoConferma={confermaAzione.stato === 'cancelled' ? 'Sì, annulla' : 'Sì, segna no-show'}
+          onAnnulla={() => setConfermaAzione(null)}
+          onConferma={() => {
+            eseguiCambiaStato(confermaAzione.p, confermaAzione.stato);
+            setConfermaAzione(null);
+          }}
         />
       )}
 

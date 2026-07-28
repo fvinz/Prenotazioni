@@ -220,6 +220,7 @@ export function NuovaPrenotazione(props: {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Cerca cliente (nome o telefono)…"
+                aria-label="Cerca cliente per nome o telefono"
                 className={CAMPO}
               />
               {trovati.length > 0 && (

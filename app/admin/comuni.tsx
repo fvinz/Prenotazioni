@@ -3,7 +3,7 @@
 // Pezzi condivisi del portale admin: hook di accesso (sessione, salone,
 // ruolo) e intestazione con la navigazione tra le sezioni.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
@@ -18,7 +18,7 @@ export interface Salone {
 export type Ruolo = 'owner' | 'staff';
 
 export const CAMPO =
-  'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
+  'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30';
 
 /** Guardia di accesso + salone e ruolo dell'utente corrente. */
 export function useSalone() {
@@ -122,5 +122,67 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
         })}
       </nav>
     </header>
+  );
+}
+
+/**
+ * Modale di conferma per azioni distruttive (annullare una prenotazione,
+ * segnare un no-show…), al posto del confirm() nativo del browser: qui si
+ * può descrivere meglio la conseguenza e restare coerenti con lo stile
+ * dell'app. Chiude anche con Esc o cliccando fuori.
+ */
+export function ConfermaAzione(props: {
+  titolo: string;
+  messaggio: string;
+  testoConferma: string;
+  testoAnnulla?: string;
+  onConferma: () => void;
+  onAnnulla: () => void;
+}) {
+  const bottoneConfermaRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    bottoneConfermaRef.current?.focus();
+    function suTasto(e: KeyboardEvent) {
+      if (e.key === 'Escape') props.onAnnulla();
+    }
+    document.addEventListener('keydown', suTasto);
+    return () => document.removeEventListener('keydown', suTasto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-20 flex items-center justify-center bg-inchiostro/40 p-6"
+      onClick={props.onAnnulla}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="conferma-azione-titolo"
+        className="w-full max-w-sm rounded-2xl bg-crema p-5 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="conferma-azione-titolo" className="font-display text-xl">
+          {props.titolo}
+        </h2>
+        <p className="mt-2 text-sm text-inchiostro/70">{props.messaggio}</p>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={props.onAnnulla}
+            className="flex-1 rounded-xl border border-sabbia py-2.5 font-semibold text-inchiostro transition hover:bg-carta/60"
+          >
+            {props.testoAnnulla ?? 'Torna indietro'}
+          </button>
+          <button
+            ref={bottoneConfermaRef}
+            onClick={props.onConferma}
+            className="flex-1 rounded-xl bg-terracotta py-2.5 font-semibold text-crema transition hover:opacity-90"
+          >
+            {props.testoConferma}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

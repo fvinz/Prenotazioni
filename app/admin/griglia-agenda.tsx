@@ -714,7 +714,7 @@ function BloccaFascia(props: {
               required
               value={dalle}
               onChange={(e) => setDalle(e.target.value)}
-              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta"
+              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
             />
           </label>
           <label className="flex-1 text-sm">
@@ -724,7 +724,7 @@ function BloccaFascia(props: {
               required
               value={alle}
               onChange={(e) => setAlle(e.target.value)}
-              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta"
+              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
             />
           </label>
         </div>
@@ -732,7 +732,7 @@ function BloccaFascia(props: {
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
           placeholder="Motivo (facoltativo): ferie, formazione…"
-          className="mt-2 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 text-sm outline-none transition focus:border-terracotta"
+          className="mt-2 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 text-sm outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
         />
         <label className="mt-2 flex items-center gap-2 text-sm text-inchiostro/70">
           <input type="checkbox" checked={ripeti} onChange={(e) => setRipeti(e.target.checked)} />

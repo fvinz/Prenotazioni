@@ -24,6 +24,16 @@ const ETICHETTA: Record<Periodo, string> = {
   anno: 'Ultimo anno',
 };
 
+// Le sezioni di dettaglio sono raggruppate in schede: tutte insieme
+// sovraccaricano il primo sguardo, quindi si vede solo la sintesi più
+// una scheda alla volta.
+type Scheda = 'andamento' | 'resa' | 'clienti';
+const ETICHETTA_SCHEDA: Record<Scheda, string> = {
+  andamento: 'Andamento',
+  resa: 'Resa',
+  clienti: 'Clienti',
+};
+
 const euro = (cents: number) =>
   (cents / 100).toLocaleString('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -38,6 +48,7 @@ export default function MetricheAdmin() {
   const { salone, ruolo, errore } = useSalone();
 
   const [periodo, setPeriodo] = useState<Periodo>('anno');
+  const [scheda, setScheda] = useState<Scheda>('andamento');
   const [dati, setDati] = useState<Metriche | null>(null);
   const [precedente, setPrecedente] = useState<Metriche | null>(null);
   const [consigli, setConsigli] = useState<Consiglio[]>([]);
@@ -178,6 +189,22 @@ export default function MetricheAdmin() {
     carica();
   }, [carica]);
 
+  // Alcuni "Consigli per te" linkano a una sezione precisa (es. #per-operatore):
+  // ora che le sezioni vivono dentro schede, bisogna prima aprire la scheda
+  // giusta, poi scorrere fino al blocco.
+  useEffect(() => {
+    if (!dati) return;
+    const hash = window.location.hash.slice(1);
+    if (hash === 'per-operatore') setScheda('resa');
+    else if (hash === 'da-recuperare') setScheda('clienti');
+  }, [dati]);
+
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    document.getElementById(hash)?.scrollIntoView({ block: 'start' });
+  }, [scheda, dati]);
+
   async function ignoraConsiglio(id: string) {
     if (!salone) return;
     setConsigli((prev) => prev.filter((c) => c.id !== id));
@@ -290,148 +317,177 @@ export default function MetricheAdmin() {
             />
           </div>
 
-          {/* Riempimento per giorno */}
-          <Sezione titolo="Riempimento per giorno" sottotitolo="Ore occupate sulle ore disponibili.">
-            <Barre
-              voci={dati.perGiorno.map((g) => ({
-                nome: g.nome,
-                valore: g.occupazione,
-                etichetta: pct(g.occupazione),
-              }))}
-              max={1}
-            />
-          </Sezione>
+          {/* Il resto dei dati è raggruppato in schede: tutto insieme
+              sarebbe troppo da leggere in un colpo d'occhio. */}
+          <div className="flex overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
+            {(Object.keys(ETICHETTA_SCHEDA) as Scheda[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setScheda(s)}
+                aria-current={scheda === s ? 'true' : undefined}
+                className={`flex-1 px-3 py-1.5 font-medium transition ${
+                  scheda === s ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+                }`}
+              >
+                {ETICHETTA_SCHEDA[s]}
+              </button>
+            ))}
+          </div>
 
-          {/* Ore di punta */}
-          <Sezione titolo="Ore di punta" sottotitolo="Appuntamenti per ora d'inizio.">
-            <BarreMensili
-              voci={dati.perFasciaOraria.map((f) => ({ nome: `${f.ora}`, valore: f.n }))}
-              formato={(v) => `${v}`}
-            />
-          </Sezione>
+          {scheda === 'andamento' && (
+            <>
+              {/* Riempimento per giorno */}
+              <Sezione titolo="Riempimento per giorno" sottotitolo="Ore occupate sulle ore disponibili.">
+                <Barre
+                  voci={dati.perGiorno.map((g) => ({
+                    nome: g.nome,
+                    valore: g.occupazione,
+                    etichetta: pct(g.occupazione),
+                  }))}
+                  max={1}
+                />
+              </Sezione>
 
-          {/* Stagionalità */}
-          <Sezione titolo="Stagionalità" sottotitolo="Incasso per mese.">
-            <BarreMensili
-              voci={dati.perMese.map((m) => ({ nome: m.etichetta, valore: m.incassoCents }))}
-            />
-          </Sezione>
+              {/* Ore di punta */}
+              <Sezione titolo="Ore di punta" sottotitolo="Appuntamenti per ora d'inizio.">
+                <BarreMensili
+                  voci={dati.perFasciaOraria.map((f) => ({ nome: `${f.ora}`, valore: f.n }))}
+                  formato={(v) => `${v}`}
+                />
+              </Sezione>
 
-          {/* Resa per servizio */}
-          <Sezione titolo="Resa per servizio" sottotitolo="Incasso e numero di appuntamenti.">
-            <Barre
-              voci={dati.perServizio.map((s) => ({
-                nome: s.nome,
-                valore: s.incassoCents,
-                etichetta: `${euro(s.incassoCents)} · ${s.n}`,
-              }))}
-              max={Math.max(1, ...dati.perServizio.map((s) => s.incassoCents))}
-            />
-          </Sezione>
-
-          {/* Per operatore */}
-          <Sezione id="per-operatore" titolo="Per operatore" sottotitolo="Impiego, incasso e redditività.">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-sabbia text-left text-xs uppercase tracking-wide text-inchiostro/50">
-                    <th className="py-2 pr-2 font-medium">Operatore</th>
-                    <th className="py-2 px-2 text-right font-medium">Impiego</th>
-                    <th className="py-2 px-2 text-right font-medium">Incasso</th>
-                    <th className="py-2 px-2 text-right font-medium">€/ora</th>
-                    <th className="py-2 px-2 text-right font-medium">Scontrino</th>
-                    <th className="py-2 px-2 text-right font-medium">Clienti</th>
-                    <th className="py-2 pl-2 text-right font-medium">No-show</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dati.perOperatore.map((o) => (
-                    <tr key={o.id} className="border-b border-sabbia/60">
-                      <td className="py-2 pr-2 font-medium">{o.nome}</td>
-                      <td className="py-2 px-2 text-right">
-                        <span className="inline-flex items-center gap-2">
-                          <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-sabbia sm:inline-block">
-                            <span
-                              className="block h-full rounded-full bg-terracotta"
-                              style={{ width: pct(Math.min(1, o.impiego)) }}
-                            />
-                          </span>
-                          <span className="tabular-nums">{pct(o.impiego)}</span>
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-right tabular-nums">{euro(o.incassoCents)}</td>
-                      <td className="py-2 px-2 text-right tabular-nums">{euro(o.resaOrariaCents)}</td>
-                      <td className="py-2 px-2 text-right tabular-nums">{euro(o.scontrinoMedioCents)}</td>
-                      <td className="py-2 px-2 text-right tabular-nums">{o.clientiUnici}</td>
-                      <td className="py-2 pl-2 text-right tabular-nums">{pct(o.tassoNoShow)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Sezione>
-
-          {/* Canale di prenotazione */}
-          <Sezione titolo="Come prenotano" sottotitolo="Canale delle prenotazioni.">
-            <Barre
-              voci={dati.perCanale.map((c) => ({
-                nome: c.canale,
-                valore: c.n,
-                etichetta: String(c.n),
-              }))}
-              max={Math.max(1, ...dati.perCanale.map((c) => c.n))}
-            />
-          </Sezione>
-
-          {/* Migliori clienti */}
-          <Sezione titolo="Migliori clienti" sottotitolo="Per valore nel periodo.">
-            <ElencoClienti
-              voci={dati.topClienti.map((c) => ({
-                id: c.id,
-                nome: c.nome,
-                destra: `${euro(c.incassoCents)} · ${c.n} appunt.`,
-              }))}
-            />
-          </Sezione>
-
-          {/* Clienti da recuperare */}
-          {dati.clientiDaRecuperare.length > 0 && (
-            <Sezione
-              id="da-recuperare"
-              titolo="Da recuperare"
-              sottotitolo="Clienti abituali che non tornano da un po'."
-            >
-              <ElencoClienti
-                voci={dati.clientiDaRecuperare.map((c) => ({
-                  id: c.id,
-                  nome: c.nome,
-                  destra: `${c.giorni} gg fa · ${euro(c.valoreCents)} spesi`,
-                  whatsapp: c.telefono
-                    ? {
-                        telefono: c.telefono,
-                        messaggio: `Ciao ${c.nome}, è da un po' che non ti vediamo da ${salone.name}! Se vuoi prenotare un appuntamento siamo qui.`,
-                      }
-                    : undefined,
-                }))}
-              />
-            </Sezione>
+              {/* Stagionalità */}
+              <Sezione titolo="Stagionalità" sottotitolo="Incasso per mese.">
+                <BarreMensili
+                  voci={dati.perMese.map((m) => ({ nome: m.etichetta, valore: m.incassoCents }))}
+                />
+              </Sezione>
+            </>
           )}
 
-          {/* Clienti inaffidabili */}
-          {dati.clientiInaffidabili.length > 0 && (
-            <Sezione
-              titolo="Alto tasso di no-show"
-              sottotitolo="Candidati a chiedere un acconto alla prenotazione."
-            >
-              <ElencoClienti
-                voci={dati.clientiInaffidabili.map((c) => ({
-                  id: c.id,
-                  nome: c.nome,
-                  destra: `${pct(c.tassoNoShow)} su ${c.n} appunt.`,
-                  accento: true,
-                }))}
-              />
-            </Sezione>
+          {scheda === 'resa' && (
+            <>
+              {/* Resa per servizio */}
+              <Sezione titolo="Resa per servizio" sottotitolo="Incasso e numero di appuntamenti.">
+                <Barre
+                  voci={dati.perServizio.map((s) => ({
+                    nome: s.nome,
+                    valore: s.incassoCents,
+                    etichetta: `${euro(s.incassoCents)} · ${s.n}`,
+                  }))}
+                  max={Math.max(1, ...dati.perServizio.map((s) => s.incassoCents))}
+                />
+              </Sezione>
+
+              {/* Per operatore */}
+              <Sezione id="per-operatore" titolo="Per operatore" sottotitolo="Impiego, incasso e redditività.">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-sabbia text-left text-xs uppercase tracking-wide text-inchiostro/50">
+                        <th className="py-2 pr-2 font-medium">Operatore</th>
+                        <th className="py-2 px-2 text-right font-medium">Impiego</th>
+                        <th className="py-2 px-2 text-right font-medium">Incasso</th>
+                        <th className="py-2 px-2 text-right font-medium">€/ora</th>
+                        <th className="py-2 px-2 text-right font-medium">Scontrino</th>
+                        <th className="py-2 px-2 text-right font-medium">Clienti</th>
+                        <th className="py-2 pl-2 text-right font-medium">No-show</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dati.perOperatore.map((o) => (
+                        <tr key={o.id} className="border-b border-sabbia/60">
+                          <td className="py-2 pr-2 font-medium">{o.nome}</td>
+                          <td className="py-2 px-2 text-right">
+                            <span className="inline-flex items-center gap-2">
+                              <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-sabbia sm:inline-block">
+                                <span
+                                  className="block h-full rounded-full bg-terracotta"
+                                  style={{ width: pct(Math.min(1, o.impiego)) }}
+                                />
+                              </span>
+                              <span className="tabular-nums">{pct(o.impiego)}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 px-2 text-right tabular-nums">{euro(o.incassoCents)}</td>
+                          <td className="py-2 px-2 text-right tabular-nums">{euro(o.resaOrariaCents)}</td>
+                          <td className="py-2 px-2 text-right tabular-nums">{euro(o.scontrinoMedioCents)}</td>
+                          <td className="py-2 px-2 text-right tabular-nums">{o.clientiUnici}</td>
+                          <td className="py-2 pl-2 text-right tabular-nums">{pct(o.tassoNoShow)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Sezione>
+
+              {/* Canale di prenotazione */}
+              <Sezione titolo="Come prenotano" sottotitolo="Canale delle prenotazioni.">
+                <Barre
+                  voci={dati.perCanale.map((c) => ({
+                    nome: c.canale,
+                    valore: c.n,
+                    etichetta: String(c.n),
+                  }))}
+                  max={Math.max(1, ...dati.perCanale.map((c) => c.n))}
+                />
+              </Sezione>
+            </>
+          )}
+
+          {scheda === 'clienti' && (
+            <>
+              {/* Migliori clienti */}
+              <Sezione titolo="Migliori clienti" sottotitolo="Per valore nel periodo.">
+                <ElencoClienti
+                  voci={dati.topClienti.map((c) => ({
+                    id: c.id,
+                    nome: c.nome,
+                    destra: `${euro(c.incassoCents)} · ${c.n} appunt.`,
+                  }))}
+                />
+              </Sezione>
+
+              {/* Clienti da recuperare */}
+              {dati.clientiDaRecuperare.length > 0 && (
+                <Sezione
+                  id="da-recuperare"
+                  titolo="Da recuperare"
+                  sottotitolo="Clienti abituali che non tornano da un po'."
+                >
+                  <ElencoClienti
+                    voci={dati.clientiDaRecuperare.map((c) => ({
+                      id: c.id,
+                      nome: c.nome,
+                      destra: `${c.giorni} gg fa · ${euro(c.valoreCents)} spesi`,
+                      whatsapp: c.telefono
+                        ? {
+                            telefono: c.telefono,
+                            messaggio: `Ciao ${c.nome}, è da un po' che non ti vediamo da ${salone.name}! Se vuoi prenotare un appuntamento siamo qui.`,
+                          }
+                        : undefined,
+                    }))}
+                  />
+                </Sezione>
+              )}
+
+              {/* Clienti inaffidabili */}
+              {dati.clientiInaffidabili.length > 0 && (
+                <Sezione
+                  titolo="Alto tasso di no-show"
+                  sottotitolo="Candidati a chiedere un acconto alla prenotazione."
+                >
+                  <ElencoClienti
+                    voci={dati.clientiInaffidabili.map((c) => ({
+                      id: c.id,
+                      nome: c.nome,
+                      destra: `${pct(c.tassoNoShow)} su ${c.n} appunt.`,
+                      accento: true,
+                    }))}
+                  />
+                </Sezione>
+              )}
+            </>
           )}
         </div>
       )}

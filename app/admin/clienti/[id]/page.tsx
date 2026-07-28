@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { calcolaStatCliente, type Prenotazione, type StatCliente } from '@/lib/metriche';
-import { Intestazione, useSalone } from '../../comuni';
+import { ConfermaAzione, Intestazione, useSalone } from '../../comuni';
 
 interface Cliente {
   id: string;
@@ -54,6 +54,10 @@ export default function SchedaCliente() {
   const [stat, setStat] = useState<StatCliente | null>(null);
   const [note, setNote] = useState('');
   const [salvataggio, setSalvataggio] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [confermaAzione, setConfermaAzione] = useState<{
+    bookingId: string;
+    stato: 'no_show' | 'cancelled';
+  } | null>(null);
 
   const carica = useCallback(async () => {
     if (!salone) return;
@@ -100,14 +104,15 @@ export default function SchedaCliente() {
     carica();
   }, [carica]);
 
-  async function cambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
-    if (stato !== 'completed') {
-      const domanda =
-        stato === 'cancelled'
-          ? 'Annullare questa prenotazione?'
-          : 'Segnare il cliente come no-show?';
-      if (!window.confirm(domanda)) return;
+  function cambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (stato === 'completed') {
+      eseguiCambiaStato(bookingId, stato);
+      return;
     }
+    setConfermaAzione({ bookingId, stato });
+  }
+
+  async function eseguiCambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
     const { error } = await supabase
       .from('bookings')
       .update({ status: stato })
@@ -206,7 +211,7 @@ export default function SchedaCliente() {
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           placeholder="Preferenze, allergie, colore usato…"
-          className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta"
+          className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
         />
         <button
           onClick={salvaNote}
@@ -275,6 +280,23 @@ export default function SchedaCliente() {
           </ul>
         )}
       </section>
+
+      {confermaAzione && (
+        <ConfermaAzione
+          titolo={confermaAzione.stato === 'cancelled' ? 'Annullare la prenotazione?' : 'Segnare il no-show?'}
+          messaggio={
+            confermaAzione.stato === 'cancelled'
+              ? 'Il cliente verrà avvisato e potrai proporgli un orario alternativo dall\'agenda.'
+              : 'Il cliente risulterà non presentato per questo appuntamento.'
+          }
+          testoConferma={confermaAzione.stato === 'cancelled' ? 'Sì, annulla' : 'Sì, segna no-show'}
+          onAnnulla={() => setConfermaAzione(null)}
+          onConferma={() => {
+            eseguiCambiaStato(confermaAzione.bookingId, confermaAzione.stato);
+            setConfermaAzione(null);
+          }}
+        />
+      )}
     </main>
   );
 }

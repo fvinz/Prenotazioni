@@ -42,6 +42,16 @@ export interface Coppia {
   service_id: string;
 }
 
+// Le quattro sezioni erano tutte impilate in un'unica pagina lunghissima:
+// ora si vede una scheda alla volta.
+type Scheda = 'servizi' | 'team' | 'orari' | 'chiusure';
+const ETICHETTA_SCHEDA: Record<Scheda, string> = {
+  servizi: 'Servizi',
+  team: 'Team',
+  orari: 'Orari',
+  chiusure: 'Chiusure',
+};
+
 export default function ImpostazioniAdmin() {
   return (
     <Suspense fallback={<main className="p-8 text-center text-inchiostro/60">Un attimo…</main>}>
@@ -61,6 +71,9 @@ function Contenuto() {
   const [fasce, setFasce] = useState<Fascia[]>([]);
   const [coppie, setCoppie] = useState<Coppia[]>([]);
   const [caricato, setCaricato] = useState(false);
+  // Un link dall'agenda (es. "aggiungi orari a questo operatore") porta
+  // qui con ?operatore=…: in quel caso si apre direttamente la scheda Orari.
+  const [scheda, setScheda] = useState<Scheda>(operatorePreselezionato ? 'orari' : 'servizi');
 
   const ricarica = useCallback(async () => {
     if (!salone) return;
@@ -121,24 +134,45 @@ function Contenuto() {
       {!caricato ? (
         <p className="text-center text-inchiostro/60">Un attimo…</p>
       ) : (
-        <div className="space-y-10">
-          <SezioneServizi
-            salone={salone}
-            servizi={servizi}
-            operatori={operatori}
-            coppie={coppie}
-            onRicarica={ricarica}
-          />
-          <SezioneTeam salone={salone} operatori={operatori} onRicarica={ricarica} />
-          <SezioneOrari
-            salone={salone}
-            operatori={operatori}
-            fasce={fasce}
-            operatorePreselezionato={operatorePreselezionato}
-            onRicarica={ricarica}
-          />
-          <SezioneChiusure salone={salone} operatori={operatori} />
-        </div>
+        <>
+          <div className="mb-6 flex overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
+            {(Object.keys(ETICHETTA_SCHEDA) as Scheda[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setScheda(s)}
+                aria-current={scheda === s ? 'true' : undefined}
+                className={`flex-1 px-3 py-1.5 font-medium transition ${
+                  scheda === s ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+                }`}
+              >
+                {ETICHETTA_SCHEDA[s]}
+              </button>
+            ))}
+          </div>
+
+          {scheda === 'servizi' && (
+            <SezioneServizi
+              salone={salone}
+              servizi={servizi}
+              operatori={operatori}
+              coppie={coppie}
+              onRicarica={ricarica}
+            />
+          )}
+          {scheda === 'team' && (
+            <SezioneTeam salone={salone} operatori={operatori} onRicarica={ricarica} />
+          )}
+          {scheda === 'orari' && (
+            <SezioneOrari
+              salone={salone}
+              operatori={operatori}
+              fasce={fasce}
+              operatorePreselezionato={operatorePreselezionato}
+              onRicarica={ricarica}
+            />
+          )}
+          {scheda === 'chiusure' && <SezioneChiusure salone={salone} operatori={operatori} />}
+        </>
       )}
     </main>
   );

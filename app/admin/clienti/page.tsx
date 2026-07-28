@@ -64,6 +64,7 @@ export default function ClientiAdmin() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Cerca per nome o telefono…"
+        aria-label="Cerca cliente per nome o telefono"
         className={`${CAMPO} mb-4`}
       />
 
