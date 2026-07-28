@@ -170,7 +170,7 @@ export default function SchedaCliente() {
       </div>
 
       {stat && stat.nCompletati > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat etichetta="Valore totale" valore={euro(stat.valoreTotaleCents)} />
           <Stat etichetta="Scontrino medio" valore={euro(stat.scontrinoMedioCents)} />
           <Stat etichetta="Appuntamenti" valore={String(stat.nCompletati)} />
@@ -204,7 +204,7 @@ export default function SchedaCliente() {
         </div>
       )}
 
-      <section className="mt-6">
+      <section className="mt-4">
         <h3 className="mb-2 font-display text-xl">Note</h3>
         <textarea
           value={note}
@@ -222,8 +222,13 @@ export default function SchedaCliente() {
         </button>
       </section>
 
-      <section className="mt-6">
-        <h3 className="mb-2 font-display text-xl">Storico appuntamenti</h3>
+      <section className="mt-10">
+        <h3 className="mb-2 font-display text-xl">
+          Storico appuntamenti
+          {storico.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-inchiostro/40">{storico.length}</span>
+          )}
+        </h3>
         {storico.length === 0 ? (
           <p className="rounded-xl bg-carta/60 p-4 text-center text-inchiostro/60">
             Nessun appuntamento finora.

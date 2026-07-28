@@ -278,10 +278,11 @@ export default function MetricheAdmin() {
           Ancora nessun dato per questo periodo.
         </p>
       ) : (
-        <div className="space-y-8">
-          {/* Consigli per te */}
+        <div>
+          {/* Consigli per te: sono azioni proposte, un genere di contenuto
+              diverso dai numeri di riferimento sotto, quindi si staccano. */}
           {consigli.length > 0 && (
-            <section>
+            <section className="mb-8">
               <h2 className="font-display text-xl">Consigli per te</h2>
               <p className="mb-3 text-sm text-inchiostro/50">
                 Letture dei tuoi numeri, non regole fisse: ignora quelli che non ti servono.
@@ -329,8 +330,10 @@ export default function MetricheAdmin() {
           </div>
 
           {/* Il resto dei dati è raggruppato in schede: tutto insieme
-              sarebbe troppo da leggere in un colpo d'occhio. */}
-          <div className="flex overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
+              sarebbe troppo da leggere in un colpo d'occhio. Il selettore
+              resta vicino alla sintesi (ne è un'estensione, non una nuova
+              zona) e vicino al proprio contenuto. */}
+          <div className="mt-4 mb-4 flex overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
             {(Object.keys(ETICHETTA_SCHEDA) as Scheda[]).map((s) => (
               <button
                 key={s}
@@ -346,8 +349,9 @@ export default function MetricheAdmin() {
           </div>
 
           {scheda === 'andamento' && (
-            <div key="andamento" className="anima-arrivo space-y-8">
-              {/* Riempimento per giorno */}
+            <div key="andamento" className="anima-arrivo">
+              {/* Riempimento per giorno + Ore di punta: stessa domanda,
+                  "quando si lavora", quindi restano vicine. */}
               <Sezione titolo="Riempimento per giorno" sottotitolo="Ore occupate sulle ore disponibili.">
                 <Barre
                   voci={dati.perGiorno.map((g) => ({
@@ -359,16 +363,20 @@ export default function MetricheAdmin() {
                 />
               </Sezione>
 
-              {/* Ore di punta */}
-              <Sezione titolo="Ore di punta" sottotitolo="Appuntamenti per ora d'inizio.">
+              <Sezione
+                className="mt-3"
+                titolo="Ore di punta"
+                sottotitolo="Appuntamenti per ora d'inizio."
+              >
                 <BarreMensili
                   voci={dati.perFasciaOraria.map((f) => ({ nome: `${f.ora}`, valore: f.n }))}
                   formato={(v) => `${v}`}
                 />
               </Sezione>
 
-              {/* Stagionalità */}
-              <Sezione titolo="Stagionalità" sottotitolo="Incasso per mese.">
+              {/* Stagionalità: cambia argomento (incasso, non affluenza),
+                  quindi si stacca di più. */}
+              <Sezione className="mt-10" titolo="Stagionalità" sottotitolo="Incasso per mese.">
                 <BarreMensili
                   voci={dati.perMese.map((m) => ({ nome: m.etichetta, valore: m.incassoCents }))}
                 />
@@ -377,8 +385,9 @@ export default function MetricheAdmin() {
           )}
 
           {scheda === 'resa' && (
-            <div key="resa" className="anima-arrivo space-y-8">
-              {/* Resa per servizio */}
+            <div key="resa" className="anima-arrivo">
+              {/* Resa per servizio + Per operatore: entrambe rispondono a
+                  "chi/cosa genera incasso", quindi restano vicine. */}
               <Sezione titolo="Resa per servizio" sottotitolo="Incasso e numero di appuntamenti.">
                 <Barre
                   voci={dati.perServizio.map((s) => ({
@@ -390,8 +399,12 @@ export default function MetricheAdmin() {
                 />
               </Sezione>
 
-              {/* Per operatore */}
-              <Sezione id="per-operatore" titolo="Per operatore" sottotitolo="Impiego, incasso e redditività.">
+              <Sezione
+                className="mt-3"
+                id="per-operatore"
+                titolo="Per operatore"
+                sottotitolo="Impiego, incasso e redditività."
+              >
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
@@ -432,8 +445,9 @@ export default function MetricheAdmin() {
                 </div>
               </Sezione>
 
-              {/* Canale di prenotazione */}
-              <Sezione titolo="Come prenotano" sottotitolo="Canale delle prenotazioni.">
+              {/* Canale di prenotazione: cambia argomento (come arrivano
+                  le prenotazioni, non chi le genera), quindi si stacca. */}
+              <Sezione className="mt-10" titolo="Come prenotano" sottotitolo="Canale delle prenotazioni.">
                 <Barre
                   voci={dati.perCanale.map((c) => ({
                     nome: c.canale,
@@ -530,15 +544,17 @@ function Sezione({
   id,
   titolo,
   sottotitolo,
+  className,
   children,
 }: {
   id?: string;
   titolo: string;
   sottotitolo: string;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className={id ? 'scroll-mt-4' : undefined}>
+    <section id={id} className={[id && 'scroll-mt-4', className].filter(Boolean).join(' ')}>
       <h2 className="font-display text-xl">{titolo}</h2>
       <p className="mb-3 text-sm text-inchiostro/50">{sottotitolo}</p>
       {children}
