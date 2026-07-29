@@ -103,6 +103,19 @@
   animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Liste orizzontali del widget pubblico (striscia dei giorni): il gesto
+   naturale è lo swipe, non la scrollbar del sistema operativo — sopra
+   uno sfondo scuro, quella barra grigia/bianca di default stona con
+   tutto il resto. Nell'admin, dove ci si aspetta un tool "da scrivania",
+   le scrollbar native restano di proposito. */
+.scroll-nascosta {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-nascosta::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),

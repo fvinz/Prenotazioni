@@ -384,7 +384,7 @@ export function StrisciaGiorni(props: {
     return <p className="text-sm text-inchiostro/60">Nessun orario disponibile online per ora.</p>;
   }
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2">
+    <div className="scroll-nascosta flex gap-2 overflow-x-auto pb-2">
       {giorni.map((g) => (
         <button
           key={g.data}
