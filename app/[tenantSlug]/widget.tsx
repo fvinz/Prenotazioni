@@ -5,7 +5,7 @@
 // Gli slot arrivano da /api/slots, la conferma passa da /api/bookings.
 // La voce del brand: frasi brevi, dirette, zero gergo tecnico.
 
-import { useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DateTime } from 'luxon';
 import type { FreeSlot } from '@/lib/slots';
@@ -380,25 +380,80 @@ export function StrisciaGiorni(props: {
       weekdayDisponibili: props.weekdayDisponibili,
     }),
   );
+
+  // Col mouse lo swipe non è scontato quanto col dito: le freccette
+  // (solo da desktop, md:) danno un modo esplicito di scorrere. Compaiono
+  // solo quando c'è davvero altro da vedere in quella direzione.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [puoIndietro, setPuoIndietro] = useState(false);
+  const [puoAvanti, setPuoAvanti] = useState(false);
+
+  const aggiornaFrecce = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setPuoIndietro(el.scrollLeft > 0);
+    setPuoAvanti(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    aggiornaFrecce();
+    window.addEventListener('resize', aggiornaFrecce);
+    return () => window.removeEventListener('resize', aggiornaFrecce);
+  }, [aggiornaFrecce]);
+
+  function scorri(verso: 1 | -1) {
+    scrollRef.current?.scrollBy({ left: verso * scrollRef.current.clientWidth * 0.8, behavior: 'smooth' });
+  }
+
   if (props.weekdayDisponibili.length === 0) {
     return <p className="text-sm text-inchiostro/60">Nessun orario disponibile online per ora.</p>;
   }
   return (
-    <div className="scroll-nascosta flex gap-2 overflow-x-auto pb-2">
-      {giorni.map((g) => (
+    <div className="relative">
+      {puoIndietro && (
         <button
-          key={g.data}
-          disabled={!g.disponibile}
-          onClick={() => props.onScegli(g)}
-          className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
-            props.selezionato === g.data
-              ? 'border-terracotta bg-terracotta font-medium text-crema'
-              : 'border-sabbia bg-carta/60 hover:border-terracotta'
-          }`}
+          type="button"
+          onClick={() => scorri(-1)}
+          aria-label="Giorni precedenti"
+          className="absolute inset-y-0 left-0 z-10 hidden w-10 items-center justify-start bg-gradient-to-r from-crema via-crema/80 to-transparent pb-2 md:flex"
         >
-          {g.etichetta}
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sabbia bg-carta text-sm text-inchiostro/70 transition hover:border-terracotta hover:text-terracotta">
+            ←
+          </span>
         </button>
-      ))}
+      )}
+      <div
+        ref={scrollRef}
+        onScroll={aggiornaFrecce}
+        className="scroll-nascosta flex gap-2 overflow-x-auto pb-2"
+      >
+        {giorni.map((g) => (
+          <button
+            key={g.data}
+            disabled={!g.disponibile}
+            onClick={() => props.onScegli(g)}
+            className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
+              props.selezionato === g.data
+                ? 'border-terracotta bg-terracotta font-medium text-crema'
+                : 'border-sabbia bg-carta/60 hover:border-terracotta'
+            }`}
+          >
+            {g.etichetta}
+          </button>
+        ))}
+      </div>
+      {puoAvanti && (
+        <button
+          type="button"
+          onClick={() => scorri(1)}
+          aria-label="Giorni successivi"
+          className="absolute inset-y-0 right-0 z-10 hidden w-10 items-center justify-end bg-gradient-to-l from-crema via-crema/80 to-transparent pb-2 md:flex"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sabbia bg-carta text-sm text-inchiostro/70 transition hover:border-terracotta hover:text-terracotta">
+            →
+          </span>
+        </button>
+      )}
     </div>
   );
 }
