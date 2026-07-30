@@ -3,7 +3,7 @@
 // Pezzi condivisi del portale admin: hook di accesso (sessione, salone,
 // ruolo) e intestazione con la navigazione tra le sezioni.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
@@ -18,7 +18,7 @@ export interface Salone {
 export type Ruolo = 'owner' | 'staff';
 
 export const CAMPO =
-  'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta';
+  'w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30';
 
 /** Guardia di accesso + salone e ruolo dell'utente corrente. */
 export function useSalone() {
@@ -85,8 +85,8 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
     <header className="mb-6">
       <div className="flex items-baseline justify-between">
         <div>
-          <p className="font-display text-2xl">
-            puntuale<span className="text-terracotta">.</span>
+          <p className="font-display text-2xl tracking-tight">
+            puntuale<span className="text-3xl leading-none text-terracotta">.</span>
           </p>
           <h1 className="mt-1 font-display text-3xl tracking-tight">{salone.name}</h1>
         </div>
@@ -122,5 +122,95 @@ export function Intestazione({ salone, ruolo }: { salone: Salone; ruolo?: Ruolo 
         })}
       </nav>
     </header>
+  );
+}
+
+/**
+ * Modale di conferma per azioni distruttive (annullare una prenotazione,
+ * segnare un no-show…), al posto del confirm() nativo del browser: qui si
+ * può descrivere meglio la conseguenza e restare coerenti con lo stile
+ * dell'app. Chiude anche con Esc o cliccando fuori.
+ */
+export function ConfermaAzione(props: {
+  titolo: string;
+  messaggio: string;
+  testoConferma: string;
+  testoAnnulla?: string;
+  onConferma: () => void;
+  onAnnulla: () => void;
+}) {
+  const bottoneConfermaRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    bottoneConfermaRef.current?.focus();
+    function suTasto(e: KeyboardEvent) {
+      if (e.key === 'Escape') props.onAnnulla();
+    }
+    document.addEventListener('keydown', suTasto);
+    return () => document.removeEventListener('keydown', suTasto);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div
+      className="anima-dissolvenza fixed inset-0 z-20 flex items-center justify-center bg-inchiostro/40 p-6"
+      onClick={props.onAnnulla}
+    >
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="conferma-azione-titolo"
+        className="anima-arrivo w-full max-w-sm rounded-2xl bg-crema p-5 shadow-lg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="conferma-azione-titolo" className="font-display text-xl">
+          {props.titolo}
+        </h2>
+        <p className="mt-2 text-sm text-inchiostro/70">{props.messaggio}</p>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={props.onAnnulla}
+            className="flex-1 rounded-xl border border-sabbia py-2.5 font-semibold text-inchiostro transition hover:bg-carta/60"
+          >
+            {props.testoAnnulla ?? 'Torna indietro'}
+          </button>
+          <button
+            ref={bottoneConfermaRef}
+            onClick={props.onConferma}
+            className="flex-1 rounded-xl bg-terracotta py-2.5 font-semibold text-crema transition hover:opacity-90"
+          >
+            {props.testoConferma}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Messaggio di errore che appare come banner in basso e sparisce da solo:
+ * per quando un aggiornamento ottimistico (lo schermo cambia subito, prima
+ * della risposta del server) viene rifiutato e va segnalato senza
+ * sostituire tutta la pagina, come farebbe un errore di caricamento.
+ */
+export function useErroreTemporaneo() {
+  const [messaggio, setMessaggio] = useState<string | null>(null);
+  useEffect(() => {
+    if (!messaggio) return;
+    const timer = setTimeout(() => setMessaggio(null), 4000);
+    return () => clearTimeout(timer);
+  }, [messaggio]);
+  return [messaggio, setMessaggio] as const;
+}
+
+export function ErroreTemporaneo({ messaggio }: { messaggio: string | null }) {
+  if (!messaggio) return null;
+  return (
+    <div
+      role="alert"
+      className="anima-arrivo fixed inset-x-4 bottom-4 z-40 mx-auto max-w-sm rounded-xl bg-inchiostro px-4 py-3 text-center text-sm text-crema shadow-lg sm:inset-x-0"
+    >
+      {messaggio}
+    </div>
   );
 }

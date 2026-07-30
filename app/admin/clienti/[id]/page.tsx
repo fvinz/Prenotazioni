@@ -10,7 +10,7 @@ import { useParams } from 'next/navigation';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { calcolaStatCliente, type Prenotazione, type StatCliente } from '@/lib/metriche';
-import { Intestazione, useSalone } from '../../comuni';
+import { ConfermaAzione, ErroreTemporaneo, Intestazione, useErroreTemporaneo, useSalone } from '../../comuni';
 
 interface Cliente {
   id: string;
@@ -52,8 +52,39 @@ export default function SchedaCliente() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [storico, setStorico] = useState<Appuntamento[] | null>(null);
   const [stat, setStat] = useState<StatCliente | null>(null);
+  const [operatori, setOperatori] = useState<{ id: string; name: string }[]>([]);
+  const [servizi, setServizi] = useState<{ id: string; name: string }[]>([]);
   const [note, setNote] = useState('');
   const [salvataggio, setSalvataggio] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [confermaAzione, setConfermaAzione] = useState<{
+    bookingId: string;
+    stato: 'no_show' | 'cancelled';
+  } | null>(null);
+  const [erroreAzione, setErroreAzione] = useErroreTemporaneo();
+
+  // Statistiche derivate dallo storico: pure e locali (calcolaStatCliente
+  // non tocca la rete), così un aggiornamento ottimistico può ricalcolarle
+  // subito invece di aspettare un giro di andata e ritorno col server.
+  const ricalcolaStat = useCallback(
+    (righe: Appuntamento[], ops: { id: string; name: string }[], svc: { id: string; name: string }[]) =>
+      calcolaStatCliente({
+        now: DateTime.now().toISO()!,
+        operatori: ops,
+        servizi: svc,
+        bookings: righe.map(
+          (b): Prenotazione => ({
+            operatorId: b.operator_id,
+            serviceId: b.service_id,
+            customerId: id,
+            startsAt: b.starts_at,
+            endsAt: b.ends_at,
+            status: b.status as Prenotazione['status'],
+            priceCents: b.price_cents,
+          }),
+        ),
+      }),
+    [id],
+  );
 
   const carica = useCallback(async () => {
     if (!salone) return;
@@ -75,44 +106,42 @@ export default function SchedaCliente() {
     setCliente((clienteRes.data ?? null) as Cliente | null);
     setNote(clienteRes.data?.notes ?? '');
     const righe = (storicoRes.data ?? []) as unknown as Appuntamento[];
+    const ops = opsRes.data ?? [];
+    const svc = svcRes.data ?? [];
+    setOperatori(ops);
+    setServizi(svc);
     setStorico(righe);
-    setStat(
-      calcolaStatCliente({
-        now: DateTime.now().toISO()!,
-        operatori: opsRes.data ?? [],
-        servizi: svcRes.data ?? [],
-        bookings: righe.map(
-          (b): Prenotazione => ({
-            operatorId: b.operator_id,
-            serviceId: b.service_id,
-            customerId: id,
-            startsAt: b.starts_at,
-            endsAt: b.ends_at,
-            status: b.status as Prenotazione['status'],
-            priceCents: b.price_cents,
-          }),
-        ),
-      }),
-    );
-  }, [supabase, salone, id]);
+    setStat(ricalcolaStat(righe, ops, svc));
+  }, [supabase, salone, id, ricalcolaStat]);
 
   useEffect(() => {
     carica();
   }, [carica]);
 
-  async function cambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
-    if (stato !== 'completed') {
-      const domanda =
-        stato === 'cancelled'
-          ? 'Annullare questa prenotazione?'
-          : 'Segnare il cliente come no-show?';
-      if (!window.confirm(domanda)) return;
+  function cambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (stato === 'completed') {
+      eseguiCambiaStato(bookingId, stato);
+      return;
     }
-    const { error } = await supabase
-      .from('bookings')
-      .update({ status: stato })
-      .eq('id', bookingId);
-    if (!error) carica();
+    setConfermaAzione({ bookingId, stato });
+  }
+
+  async function eseguiCambiaStato(bookingId: string, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (!storico) return;
+    const precedente = storico;
+    // Ottimistico: lo storico (e le statistiche che ne derivano, es. il
+    // tasso di no-show) cambiano subito; se il server rifiuta si torna
+    // indietro e lo si segnala con un banner temporaneo.
+    const aggiornato = storico.map((a) => (a.id === bookingId ? { ...a, status: stato } : a));
+    setStorico(aggiornato);
+    setStat(ricalcolaStat(aggiornato, operatori, servizi));
+
+    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', bookingId);
+    if (error) {
+      setStorico(precedente);
+      setStat(ricalcolaStat(precedente, operatori, servizi));
+      setErroreAzione('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
+    }
   }
 
   async function salvaNote() {
@@ -165,7 +194,7 @@ export default function SchedaCliente() {
       </div>
 
       {stat && stat.nCompletati > 0 && (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Stat etichetta="Valore totale" valore={euro(stat.valoreTotaleCents)} />
           <Stat etichetta="Scontrino medio" valore={euro(stat.scontrinoMedioCents)} />
           <Stat etichetta="Appuntamenti" valore={String(stat.nCompletati)} />
@@ -199,14 +228,14 @@ export default function SchedaCliente() {
         </div>
       )}
 
-      <section className="mt-6">
+      <section className="mt-4">
         <h3 className="mb-2 font-display text-xl">Note</h3>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           placeholder="Preferenze, allergie, colore usato…"
-          className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta"
+          className="w-full rounded-xl border border-sabbia bg-carta/60 px-4 py-3 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
         />
         <button
           onClick={salvaNote}
@@ -217,8 +246,13 @@ export default function SchedaCliente() {
         </button>
       </section>
 
-      <section className="mt-6">
-        <h3 className="mb-2 font-display text-xl">Storico appuntamenti</h3>
+      <section className="mt-10">
+        <h3 className="mb-2 font-display text-xl">
+          Storico appuntamenti
+          {storico.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-inchiostro/40">{storico.length}</span>
+          )}
+        </h3>
         {storico.length === 0 ? (
           <p className="rounded-xl bg-carta/60 p-4 text-center text-inchiostro/60">
             Nessun appuntamento finora.
@@ -275,6 +309,25 @@ export default function SchedaCliente() {
           </ul>
         )}
       </section>
+
+      {confermaAzione && (
+        <ConfermaAzione
+          titolo={confermaAzione.stato === 'cancelled' ? 'Annullare la prenotazione?' : 'Segnare il no-show?'}
+          messaggio={
+            confermaAzione.stato === 'cancelled'
+              ? 'Il cliente verrà avvisato e potrai proporgli un orario alternativo dall\'agenda.'
+              : 'Il cliente risulterà non presentato per questo appuntamento.'
+          }
+          testoConferma={confermaAzione.stato === 'cancelled' ? 'Sì, annulla' : 'Sì, segna no-show'}
+          onAnnulla={() => setConfermaAzione(null)}
+          onConferma={() => {
+            eseguiCambiaStato(confermaAzione.bookingId, confermaAzione.stato);
+            setConfermaAzione(null);
+          }}
+        />
+      )}
+
+      <ErroreTemporaneo messaggio={erroreAzione} />
     </main>
   );
 }

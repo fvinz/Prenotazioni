@@ -63,3 +63,38 @@ export function raggruppaSlotPerFascia(slots: FreeSlot[]): SlotRaggruppati {
   }
   return { mattina, pomeriggio };
 }
+
+/**
+ * Unisce gli slot liberi di più operatori (modalità "chiunque sia
+ * libero" del widget): stesso orario libero per più operatori conta
+ * una volta sola. Chi verrà effettivamente assegnato si decide dopo,
+ * in create_booking — qui serve solo mostrare cosa si può scegliere.
+ */
+export function unisciSlot(gruppi: FreeSlot[][]): FreeSlot[] {
+  const visti = new Set<string>();
+  const out: FreeSlot[] = [];
+  for (const slots of gruppi) {
+    for (const slot of slots) {
+      if (visti.has(slot.start)) continue;
+      visti.add(slot.start);
+      out.push(slot);
+    }
+  }
+  return out.sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/**
+ * Giorni della settimana prenotabili in modalità "chiunque sia libero":
+ * l'unione delle fasce dei soli operatori che erogano quel servizio
+ * (non di tutti gli operatori del salone).
+ */
+export function weekdayAggregati(
+  weekdayPerOperatore: Record<string, number[]>,
+  operatorIds: string[],
+): number[] {
+  const set = new Set<number>();
+  for (const id of operatorIds) {
+    for (const weekday of weekdayPerOperatore[id] ?? []) set.add(weekday);
+  }
+  return [...set];
+}

@@ -20,6 +20,13 @@
   --font-display: 'Gloock', Georgia, serif;
   --font-sans: 'Work Sans', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Sotto text-xs (12px) il ruolo è sempre lo stesso — etichetta densa in
+     uno spazio piccolo (badge, orario, didascalia) — ma prima veniva
+     scritto ogni volta come valore arbitrario diverso (9px, 10px, 11px):
+     uno scalino nominato, non tre numeri a caso. */
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 0.875rem;
 }
 
 /* Versione scura: segue la preferenza del sistema operativo, nessun
@@ -44,5 +51,75 @@
     --color-op-2: #8aa686;
     --color-op-3: #d1a75f;
     --color-op-4: #c07f91;
+  }
+
+  /* Testo chiaro su fondo scuro appare otticamente più sottile a parità
+     di peso (l'antialiasing "mangia" i tratti in modo diverso rispetto a
+     testo scuro su chiaro): un filo di tracking in più lo compensa,
+     senza toccare i pesi né rifare le dimensioni testo per testo. */
+  body {
+    letter-spacing: 0.005em;
+  }
+}
+
+/* Vocabolario di motion del portale admin: un'unica idea, ripetuta ovunque
+   qualcosa arriva sullo schermo (modali, cambio di scheda) — lo sfondo
+   dissolve, il contenuto arriva con una leggera risalita. Niente rimbalzi:
+   l'app serve a completare un compito, non a intrattenere. */
+@keyframes puntuale-dissolvenza {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes puntuale-arrivo {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.anima-dissolvenza {
+  animation: puntuale-dissolvenza 150ms ease-out;
+}
+
+.anima-arrivo {
+  animation: puntuale-arrivo 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anima-dissolvenza,
+  .anima-arrivo {
+    animation: none;
+  }
+}
+
+/* Il blocco prenotazione cliccato in agenda "diventa" il pannello di
+   dettaglio (View Transitions API, vedi conTransizioneVista in
+   griglia-agenda.tsx): stessa curva e ordine di grandezza di durata del
+   resto del vocabolario di motion, non il ritmo di default del browser. */
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Liste orizzontali del widget pubblico (striscia dei giorni): il gesto
+   naturale è lo swipe, non la scrollbar del sistema operativo — sopra
+   uno sfondo scuro, quella barra grigia/bianca di default stona con
+   tutto il resto. Nell'admin, dove ci si aspetta un tool "da scrivania",
+   le scrollbar native restano di proposito. */
+.scroll-nascosta {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-nascosta::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

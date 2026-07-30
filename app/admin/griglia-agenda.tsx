@@ -12,10 +12,25 @@
 // raggiungibile da qui senza cambiare pagina.
 
 import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import Link from 'next/link';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
 import type { Salone } from './comuni';
+
+// Apertura/chiusura del dettaglio prenotazione come vera transizione:
+// il blocco cliccato in griglia "diventa" il pannello (View Transitions
+// API), non due elementi separati che si dissolvono uno nell'altro. Non
+// tutti i browser la supportano (Firefox, in particolare): senza,
+// l'aggiornamento avviene comunque, solo senza morphing — la modale si
+// apre e chiude esattamente come prima.
+function conTransizioneVista(aggiorna: () => void) {
+  if (typeof document === 'undefined' || typeof document.startViewTransition !== 'function') {
+    aggiorna();
+    return;
+  }
+  document.startViewTransition(() => flushSync(aggiorna));
+}
 
 export interface Operatore {
   id: string;
@@ -187,7 +202,8 @@ export function GrigliaAgenda(props: {
         )}
         posizionePx={posizionePx}
         adessoPer={adessoPer}
-        onSelezionaPrenotazione={setDettaglio}
+        dettaglioApertoId={dettaglio?.id ?? null}
+        onSelezionaPrenotazione={(p) => conTransizioneVista(() => setDettaglio(p))}
         onSelezionaSlot={(giornoISO, ora) => apriSlot(opSelezionato.id, opSelezionato.name, giornoISO, ora)}
       />
     ) : (
@@ -202,7 +218,8 @@ export function GrigliaAgenda(props: {
         chiusure={delGiorno(props.chiusure, props.giornoISO, tz)}
         posizionePx={posizionePx}
         adessoPer={adessoPer}
-        onSelezionaPrenotazione={setDettaglio}
+        dettaglioApertoId={dettaglio?.id ?? null}
+        onSelezionaPrenotazione={(p) => conTransizioneVista(() => setDettaglio(p))}
         onSelezionaSlot={(operatorId, operatorNome, ora) =>
           apriSlot(operatorId, operatorNome, props.giornoISO, ora)
         }
@@ -211,16 +228,18 @@ export function GrigliaAgenda(props: {
 
   return (
     <>
-      {contenuto}
+      <div key={props.vista} className="anima-arrivo flex h-full min-h-0 flex-col">
+        {contenuto}
+      </div>
 
       {dettaglio && (
         <DettaglioPrenotazione
           prenotazione={dettaglio}
           tz={tz}
-          onChiudi={() => setDettaglio(null)}
+          onChiudi={() => conTransizioneVista(() => setDettaglio(null))}
           onCambiaStato={(stato) => {
             props.onCambiaStato(dettaglio, stato);
-            setDettaglio(null);
+            conTransizioneVista(() => setDettaglio(null));
           }}
         />
       )}
@@ -252,12 +271,18 @@ function finestraOraria(righe: { starts_at: string; ends_at: string }[], tz: str
 
 function EtichetteOre(props: { oraMin: number; oraMax: number; piccole?: boolean }) {
   const ore = Array.from({ length: props.oraMax - props.oraMin + 1 }, (_, i) => props.oraMin + i);
+  const ultimo = ore.length - 1;
   return (
     <div className="relative border-r border-sabbia">
-      {ore.map((ora) => (
+      {ore.map((ora, i) => (
         <span
           key={ora}
-          className={`absolute right-1 -translate-y-1/2 font-mono text-inchiostro/40 ${props.piccole ? 'text-[11px]' : 'text-xs'}`}
+          className={`absolute right-1 font-mono text-inchiostro/40 ${props.piccole ? 'text-2xs' : 'text-xs'} ${
+            // Le ore intermedie restano centrate sulla riga; la prima e
+            // l'ultima si appoggiano alla riga invece di sporgere fuori
+            // dall'area visibile (dove finivano tagliate a metà).
+            i === 0 ? '' : i === ultimo ? '-translate-y-full' : '-translate-y-1/2'
+          }`}
           style={{ top: (ora - props.oraMin) * PX_ORA }}
         >
           {ora}:00
@@ -273,7 +298,11 @@ function SelettoreOperatore(props: {
   onSeleziona: (id: string) => void;
 }) {
   return (
-    <div className="mb-3 flex gap-3 overflow-x-auto pb-1">
+    // overflow-x-auto forza anche l'asse verticale a "auto" (comportamento
+    // dello standard CSS quando solo un asse è scrollabile): senza un po'
+    // di spazio verticale, l'anello di selezione (ring-offset-2 + ring-2,
+    // ~4px oltre il cerchio) veniva tagliato in alto.
+    <div className="-mx-1.5 mb-3 flex gap-3 overflow-x-auto p-1.5">
       {props.operatori.map((op, i) => (
         <button
           key={op.id}
@@ -283,13 +312,13 @@ function SelettoreOperatore(props: {
           }`}
         >
           <span
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-crema ${STILE_OP[i % STILE_OP.length].avatar} ${
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-crema ${STILE_OP[i % STILE_OP.length].avatar} ${
               props.selezionatoId === op.id ? 'ring-2 ring-terracotta ring-offset-2 ring-offset-crema' : ''
             }`}
           >
             {iniziali(op.name)}
           </span>
-          <span className="text-[11px]">{op.name}</span>
+          <span className="text-2xs">{op.name}</span>
         </button>
       ))}
     </div>
@@ -307,6 +336,7 @@ function VistaGiorno(props: {
   chiusure: Chiusura[];
   posizionePx: (iso: string, oraMin: number) => number;
   adessoPer: (giornoISO: string, oraMin: number, oraMax: number) => number | null;
+  dettaglioApertoId: string | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (operatorId: string, operatorNome: string, ora: number) => void;
 }) {
@@ -317,12 +347,13 @@ function VistaGiorno(props: {
 
   return (
     <>
-      {/* Desktop: un operatore per colonna. Altezza massima legata al
-          viewport: nella finestra oraria di default (9–19) ci sta tutto
+      {/* Desktop: un operatore per colonna. Occupa lo spazio verticale
+          rimasto (assegnato dal genitore, che è un flex column a tutta
+          altezza): nella finestra oraria di default (9–19) ci sta tutto
           senza scorrimento; se la giornata si allunga (appuntamenti fuori
           dall'orario tipico, o schermi bassi) scorre solo la griglia,
           l'intestazione resta visibile. */}
-      <div className="hidden max-h-[calc(100vh-260px)] overflow-auto rounded-xl border border-sabbia md:block">
+      <div className="hidden min-h-0 flex-1 overflow-auto rounded-xl border border-sabbia md:block">
         <div
           className="relative grid min-w-[720px]"
           style={{
@@ -337,7 +368,7 @@ function VistaGiorno(props: {
               className="sticky top-0 z-10 flex items-center gap-2 border-b border-l border-sabbia bg-crema px-2 py-2.5"
             >
               <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-crema ${STILE_OP[i % STILE_OP.length].avatar}`}
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-2xs font-semibold text-crema ${STILE_OP[i % STILE_OP.length].avatar}`}
               >
                 {iniziali(op.name)}
               </span>
@@ -351,7 +382,7 @@ function VistaGiorno(props: {
               <Link
                 href={`/admin/impostazioni?operatore=${op.id}#orari`}
                 title={`Orari e ferie di ${op.name}`}
-                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sabbia text-[10px] text-inchiostro/50 transition hover:border-terracotta hover:text-terracotta"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-sabbia text-2xs text-inchiostro/50 transition hover:border-terracotta hover:text-terracotta"
               >
                 ⚙
               </Link>
@@ -372,6 +403,7 @@ function VistaGiorno(props: {
               chiusure={props.chiusure.filter((c) => c.operator_id === op.id || c.operator_id === null)}
               posizionePx={(iso) => props.posizionePx(iso, oraMin)}
               adessoOffset={adessoOffset}
+              dettaglioApertoId={props.dettaglioApertoId}
               onSelezionaPrenotazione={props.onSelezionaPrenotazione}
               onSelezionaSlot={(ora) => props.onSelezionaSlot(op.id, op.name, ora)}
             />
@@ -379,23 +411,27 @@ function VistaGiorno(props: {
         </div>
       </div>
 
-      {/* Mobile: selettore di operatore + una colonna sola. */}
-      <div className="md:hidden">
-        <SelettoreOperatore
-          operatori={props.operatori}
-          selezionatoId={props.operatoreSelezionatoId}
-          onSeleziona={props.onSelezionaOperatore}
-        />
-        <div className="mb-2 flex items-center justify-between px-1">
-          <p className="text-sm font-medium">{opSelezionato.name}</p>
-          <Link
-            href={`/admin/impostazioni?operatore=${opSelezionato.id}#orari`}
-            className="text-xs text-inchiostro/50 hover:text-terracotta"
-          >
-            ⚙ Orari e ferie
-          </Link>
+      {/* Mobile: selettore di operatore + una colonna sola. Anche qui,
+          scorre solo la griglia oraria: il selettore e l'intestazione
+          restano fissi in cima. */}
+      <div className="flex h-full min-h-0 flex-col md:hidden">
+        <div className="shrink-0">
+          <SelettoreOperatore
+            operatori={props.operatori}
+            selezionatoId={props.operatoreSelezionatoId}
+            onSeleziona={props.onSelezionaOperatore}
+          />
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="text-sm font-medium">{opSelezionato.name}</p>
+            <Link
+              href={`/admin/impostazioni?operatore=${opSelezionato.id}#orari`}
+              className="text-xs text-inchiostro/50 hover:text-terracotta"
+            >
+              ⚙ Orari e ferie
+            </Link>
+          </div>
         </div>
-        <div className="max-h-[calc(100vh-360px)] overflow-auto rounded-xl border border-sabbia">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-sabbia">
           <div
             className="relative grid min-w-[300px]"
             style={{ gridTemplateColumns: '44px 1fr', height: altezzaGriglia }}
@@ -411,6 +447,7 @@ function VistaGiorno(props: {
               )}
               posizionePx={(iso) => props.posizionePx(iso, oraMin)}
               adessoOffset={adessoOffset}
+              dettaglioApertoId={props.dettaglioApertoId}
               onSelezionaPrenotazione={props.onSelezionaPrenotazione}
               onSelezionaSlot={(ora) => props.onSelezionaSlot(opSelezionato.id, opSelezionato.name, ora)}
             />
@@ -436,6 +473,7 @@ function VistaSettimana(props: {
   chiusure: Chiusura[];
   posizionePx: (iso: string, oraMin: number) => number;
   adessoPer: (giornoISO: string, oraMin: number, oraMax: number) => number | null;
+  dettaglioApertoId: string | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (giornoISO: string, ora: number) => void;
 }) {
@@ -445,13 +483,15 @@ function VistaSettimana(props: {
   const giorni = Array.from({ length: 7 }, (_, i) => inizioSettimana.plus({ days: i }));
 
   return (
-    <>
-      <SelettoreOperatore
-        operatori={props.operatori}
-        selezionatoId={props.operatoreSelezionatoId}
-        onSeleziona={props.onSelezionaOperatore}
-      />
-      <div className="max-h-[calc(100vh-320px)] overflow-auto rounded-xl border border-sabbia">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0">
+        <SelettoreOperatore
+          operatori={props.operatori}
+          selezionatoId={props.operatoreSelezionatoId}
+          onSeleziona={props.onSelezionaOperatore}
+        />
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-sabbia">
         <div
           className="relative grid min-w-[720px]"
           style={{
@@ -468,7 +508,7 @@ function VistaSettimana(props: {
                 key={giornoISO}
                 className="sticky top-0 z-10 border-b border-l border-sabbia bg-crema px-2 py-2 text-center"
               >
-                <p className="font-mono text-[10px] uppercase tracking-wide text-inchiostro/50">
+                <p className="font-mono text-2xs uppercase tracking-wide text-inchiostro/50">
                   {GIORNI_SETTIMANA[g.weekday - 1]}
                 </p>
                 <p className={`text-sm font-semibold ${eOggi ? 'text-terracotta' : ''}`}>{g.day}</p>
@@ -492,6 +532,7 @@ function VistaSettimana(props: {
                 chiusure={delGiorno(props.chiusure, giornoISO, props.tz)}
                 posizionePx={(iso) => props.posizionePx(iso, oraMin)}
                 adessoOffset={props.adessoPer(giornoISO, oraMin, oraMax)}
+                dettaglioApertoId={props.dettaglioApertoId}
                 onSelezionaPrenotazione={props.onSelezionaPrenotazione}
                 onSelezionaSlot={(ora) => props.onSelezionaSlot(giornoISO, ora)}
               />
@@ -499,7 +540,7 @@ function VistaSettimana(props: {
           })}
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -511,6 +552,7 @@ function ColonnaOperatore(props: {
   chiusure: Chiusura[];
   posizionePx: (iso: string) => number;
   adessoOffset: number | null;
+  dettaglioApertoId: string | null;
   onSelezionaPrenotazione: (p: Prenotazione) => void;
   onSelezionaSlot: (ora: number) => void;
 }) {
@@ -544,7 +586,7 @@ function ColonnaOperatore(props: {
         return (
           <div
             key={c.id}
-            className="pointer-events-none absolute left-1 right-1 flex items-center justify-center rounded-lg bg-sabbia/70 px-1 text-center font-mono text-[10px] uppercase tracking-wide text-inchiostro/50"
+            className="pointer-events-none absolute left-1 right-1 flex items-center justify-center rounded-lg bg-sabbia/70 px-1 text-center font-mono text-2xs uppercase tracking-wide text-inchiostro/50"
             style={{ top, height: Math.max(bottom - top, 20) }}
           >
             {c.reason ?? 'Chiuso'}
@@ -566,14 +608,21 @@ function ColonnaOperatore(props: {
             className={`absolute left-1 right-1 overflow-hidden rounded-lg border-l-[3px] bg-carta px-2 py-1 text-left shadow-sm transition hover:shadow-md ${stile.bordo} ${
               annullata ? 'opacity-45' : ''
             }`}
-            style={{ top, height: Math.max(bottom - top, 24) }}
+            style={{
+              top,
+              height: Math.max(bottom - top, 24),
+              // Il nome resta sul blocco quando è chiuso; passa al pannello
+              // di dettaglio quando è aperto (mai su entrambi insieme,
+              // altrimenti il browser non sa cosa morphare in cosa).
+              viewTransitionName: props.dettaglioApertoId === p.id ? undefined : `prenotazione-${p.id}`,
+            }}
           >
             {completata && (
-              <span className="absolute right-1 top-1 text-[10px] font-bold text-buono">✓</span>
+              <span className="absolute right-1 top-1 text-2xs font-semibold text-buono">✓</span>
             )}
-            <span className="block truncate text-[11px] font-semibold">{nome}</span>
+            <span className="block truncate text-2xs font-semibold">{nome}</span>
             <span
-              className={`block truncate text-[10px] text-inchiostro/60 ${annullata ? 'line-through' : ''}`}
+              className={`block truncate text-2xs text-inchiostro/60 ${annullata ? 'line-through' : ''}`}
             >
               {p.services?.name ?? 'Servizio'}
             </span>
@@ -607,11 +656,12 @@ function DettaglioPrenotazione(props: {
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
+      className="anima-dissolvenza fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
       onClick={props.onChiudi}
     >
       <div
-        className="w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        className="anima-arrivo w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        style={{ viewTransitionName: `prenotazione-${p.id}` }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -685,12 +735,12 @@ function BloccaFascia(props: {
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
+      className="anima-dissolvenza fixed inset-0 z-30 flex items-end justify-center bg-inchiostro/40 p-0 sm:items-center sm:p-6"
       onClick={props.onChiudi}
     >
       <form
         onSubmit={submit}
-        className="w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
+        className="anima-arrivo w-full max-w-sm rounded-t-2xl bg-crema p-5 sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-baseline justify-between">
@@ -714,7 +764,7 @@ function BloccaFascia(props: {
               required
               value={dalle}
               onChange={(e) => setDalle(e.target.value)}
-              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta"
+              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
             />
           </label>
           <label className="flex-1 text-sm">
@@ -724,7 +774,7 @@ function BloccaFascia(props: {
               required
               value={alle}
               onChange={(e) => setAlle(e.target.value)}
-              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta"
+              className="mt-0.5 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
             />
           </label>
         </div>
@@ -732,7 +782,7 @@ function BloccaFascia(props: {
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
           placeholder="Motivo (facoltativo): ferie, formazione…"
-          className="mt-2 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 text-sm outline-none transition focus:border-terracotta"
+          className="mt-2 w-full rounded-xl border border-sabbia bg-carta/60 px-3 py-2 text-sm outline-none transition focus:border-terracotta focus:ring-2 focus:ring-terracotta/30"
         />
         <label className="mt-2 flex items-center gap-2 text-sm text-inchiostro/70">
           <input type="checkbox" checked={ripeti} onChange={(e) => setRipeti(e.target.checked)} />

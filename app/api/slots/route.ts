@@ -6,7 +6,8 @@
 //
 //  Query string:
 //    tenantSlug  slug del salone (es. 'salone-mario')
-//    operatorId  uuid dell'operatore
+//    operatorId  uuid dell'operatore (opzionale: assente = "chiunque sia
+//                libero", aggrega gli slot di tutti gli operatori idonei)
 //    serviceId   uuid del servizio
 //    date        giorno locale del salone, 'YYYY-MM-DD'
 //
@@ -17,17 +18,18 @@ import { NextResponse } from 'next/server';
 import { DateTime } from 'luxon';
 import { getSupabaseServerClient } from '@/lib/supabase/server';
 import { generaSlotLiberi, type AvailabilityWindow, type BusyInterval } from '@/lib/slots';
+import { unisciSlot } from '@/lib/widget-utils';
 
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const tenantSlug = params.get('tenantSlug');
-  const operatorId = params.get('operatorId');
+  const operatorId = params.get('operatorId'); // assente = tutti gli operatori idonei
   const serviceId = params.get('serviceId');
   const date = params.get('date');
 
-  if (!tenantSlug || !operatorId || !serviceId || !date) {
+  if (!tenantSlug || !serviceId || !date) {
     return NextResponse.json(
-      { error: 'Parametri richiesti: tenantSlug, operatorId, serviceId, date' },
+      { error: 'Parametri richiesti: tenantSlug, serviceId, date' },
       { status: 400 },
     );
   }
@@ -61,70 +63,103 @@ export async function GET(request: Request) {
     return NextResponse.json({ slots: [] });
   }
 
-  // Servizio (durata + buffer) e fasce dell'operatore: letture pubbliche
-  // consentite dalle policy RLS. La RPC restituisce gli intervalli occupati
-  // (prenotazioni attive + chiusure) senza esporre dati dei clienti.
-  const [serviceRes, operatorRes, availabilityRes, busyRes] = await Promise.all([
-    supabase
-      .from('services')
-      .select('duration_minutes, buffer_minutes')
-      .eq('id', serviceId)
-      .eq('tenant_id', tenant.id)
-      .maybeSingle(),
-    supabase
-      .from('operators')
-      .select('id')
-      .eq('id', operatorId)
-      .eq('tenant_id', tenant.id)
-      .maybeSingle(),
-    supabase
-      .from('availability')
-      .select('weekday, start_time, end_time')
-      .eq('operator_id', operatorId),
-    supabase.rpc('get_busy_intervals', {
-      p_operator_id: operatorId,
-      p_from: dayStart.toUTC().toISO(),
-      p_to: dayEnd.toUTC().toISO(),
-    }),
-  ]);
-
-  if (serviceRes.error || operatorRes.error || availabilityRes.error || busyRes.error) {
+  const serviceRes = await supabase
+    .from('services')
+    .select('duration_minutes, buffer_minutes')
+    .eq('id', serviceId)
+    .eq('tenant_id', tenant.id)
+    .maybeSingle();
+  if (serviceRes.error) {
     return NextResponse.json({ error: 'Errore nel recupero dei dati' }, { status: 500 });
   }
   if (!serviceRes.data) {
     return NextResponse.json({ error: 'Servizio non disponibile' }, { status: 404 });
   }
-  if (!operatorRes.data) {
-    return NextResponse.json({ error: 'Operatore non trovato' }, { status: 404 });
+  const servizio = serviceRes.data;
+
+  // Uno o più operatori: singolo se scelto dal cliente, altrimenti tutti
+  // quelli attivi che erogano il servizio ("chiunque sia libero").
+  let operatorIds: string[];
+  if (operatorId) {
+    const operatorRes = await supabase
+      .from('operators')
+      .select('id')
+      .eq('id', operatorId)
+      .eq('tenant_id', tenant.id)
+      .maybeSingle();
+    if (operatorRes.error) {
+      return NextResponse.json({ error: 'Errore nel recupero dei dati' }, { status: 500 });
+    }
+    if (!operatorRes.data) {
+      return NextResponse.json({ error: 'Operatore non trovato' }, { status: 404 });
+    }
+    operatorIds = [operatorId];
+  } else {
+    const opsvcRes = await supabase
+      .from('operator_services')
+      .select('operator_id, operators!inner(tenant_id)')
+      .eq('service_id', serviceId)
+      .eq('operators.tenant_id', tenant.id);
+    if (opsvcRes.error) {
+      return NextResponse.json({ error: 'Errore nel recupero dei dati' }, { status: 500 });
+    }
+    // RLS su operators limita già ai soli attivi (operators_public_read).
+    operatorIds = [...new Set((opsvcRes.data ?? []).map((r) => r.operator_id))];
   }
 
-  const availability: AvailabilityWindow[] = (availabilityRes.data ?? []).map((a) => ({
-    weekday: a.weekday,
-    // Postgres 'time' arriva come 'HH:MM:SS': i primi 5 caratteri sono 'HH:mm'.
-    startTime: String(a.start_time).slice(0, 5),
-    endTime: String(a.end_time).slice(0, 5),
-  }));
+  if (operatorIds.length === 0) {
+    return NextResponse.json({ slots: [] });
+  }
 
-  // La RPC fonde già prenotazioni e chiusure: per generaSlotLiberi la
-  // distinzione è irrilevante (stessa regola di overlap).
-  const busy: BusyInterval[] = (busyRes.data ?? []).map(
-    (b: { starts_at: string; ends_at: string }) => ({
-      startsAt: b.starts_at,
-      endsAt: b.ends_at,
+  // Per ciascun operatore: fasce + intervalli occupati (la RPC fonde già
+  // prenotazioni e chiusure, non espone dati dei clienti), poi la stessa
+  // funzione pura di sempre. In modalità "chiunque sia libero" gli slot
+  // dei vari operatori vengono uniti — chi verrà assegnato si decide
+  // dopo, in create_booking.
+  const perOperatore = await Promise.all(
+    operatorIds.map(async (opId) => {
+      const [availabilityRes, busyRes] = await Promise.all([
+        supabase.from('availability').select('weekday, start_time, end_time').eq('operator_id', opId),
+        supabase.rpc('get_busy_intervals', {
+          p_operator_id: opId,
+          p_from: dayStart.toUTC().toISO(),
+          p_to: dayEnd.toUTC().toISO(),
+        }),
+      ]);
+      if (availabilityRes.error || busyRes.error) return null;
+
+      const availability: AvailabilityWindow[] = (availabilityRes.data ?? []).map((a) => ({
+        weekday: a.weekday,
+        // Postgres 'time' arriva come 'HH:MM:SS': i primi 5 caratteri sono 'HH:mm'.
+        startTime: String(a.start_time).slice(0, 5),
+        endTime: String(a.end_time).slice(0, 5),
+      }));
+      const busy: BusyInterval[] = (busyRes.data ?? []).map(
+        (b: { starts_at: string; ends_at: string }) => ({
+          startsAt: b.starts_at,
+          endsAt: b.ends_at,
+        }),
+      );
+
+      return generaSlotLiberi({
+        date,
+        timezone: tenant.timezone,
+        serviceDurationMinutes: servizio.duration_minutes,
+        serviceBufferMinutes: servizio.buffer_minutes,
+        availability,
+        bookings: busy,
+        timeOff: [],
+        now: DateTime.utc().toISO(),
+        minLeadMinutes: tenant.min_lead_minutes,
+      });
     }),
   );
 
-  const slots = generaSlotLiberi({
-    date,
-    timezone: tenant.timezone,
-    serviceDurationMinutes: serviceRes.data.duration_minutes,
-    serviceBufferMinutes: serviceRes.data.buffer_minutes,
-    availability,
-    bookings: busy,
-    timeOff: [],
-    now: DateTime.utc().toISO(),
-    minLeadMinutes: tenant.min_lead_minutes,
-  });
+  if (perOperatore.some((s) => s === null)) {
+    return NextResponse.json({ error: 'Errore nel recupero dei dati' }, { status: 500 });
+  }
+
+  const slots = unisciSlot(perOperatore as NonNullable<(typeof perOperatore)[number]>[]);
 
   return NextResponse.json({ slots });
 }

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { giorniPrenotabili, raggruppaSlotPerFascia } from './widget-utils';
+import {
+  giorniPrenotabili,
+  raggruppaSlotPerFascia,
+  unisciSlot,
+  weekdayAggregati,
+} from './widget-utils';
 
 const TZ = 'Europe/Rome';
 
@@ -56,5 +61,43 @@ describe('raggruppaSlotPerFascia', () => {
     ]);
     expect(mattina.map((s) => s.label)).toEqual(['09:00', '12:45']);
     expect(pomeriggio.map((s) => s.label)).toEqual(['13:00', '17:30']);
+  });
+});
+
+describe('unisciSlot', () => {
+  it('deduplica per orario e ordina il risultato', () => {
+    const unito = unisciSlot([
+      [
+        { start: '2026-07-20T09:00:00Z', label: '11:00' },
+        { start: '2026-07-20T10:00:00Z', label: '12:00' },
+      ],
+      [
+        { start: '2026-07-20T08:00:00Z', label: '10:00' },
+        { start: '2026-07-20T09:00:00Z', label: '11:00' }, // stesso orario, altro operatore
+      ],
+    ]);
+    expect(unito.map((s) => s.start)).toEqual([
+      '2026-07-20T08:00:00Z',
+      '2026-07-20T09:00:00Z',
+      '2026-07-20T10:00:00Z',
+    ]);
+  });
+
+  it('nessun operatore libero: nessuno slot', () => {
+    expect(unisciSlot([[], []])).toEqual([]);
+  });
+});
+
+describe('weekdayAggregati', () => {
+  it('unisce le fasce dei soli operatori indicati', () => {
+    const risultato = weekdayAggregati(
+      { a: [1, 3, 5], b: [2, 3], c: [6] },
+      ['a', 'b'],
+    );
+    expect(risultato.sort()).toEqual([1, 2, 3, 5]);
+  });
+
+  it('ignora operatori senza fasce registrate', () => {
+    expect(weekdayAggregati({}, ['sconosciuto'])).toEqual([]);
   });
 });

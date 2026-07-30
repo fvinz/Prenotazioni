@@ -5,13 +5,14 @@
 // Gli slot arrivano da /api/slots, la conferma passa da /api/bookings.
 // La voce del brand: frasi brevi, dirette, zero gergo tecnico.
 
-import { useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { DateTime } from 'luxon';
 import type { FreeSlot } from '@/lib/slots';
 import {
   giorniPrenotabili,
   raggruppaSlotPerFascia,
+  weekdayAggregati,
   type GiornoPrenotabile,
 } from '@/lib/widget-utils';
 
@@ -28,18 +29,26 @@ type Passo = 'servizio' | 'operatore' | 'quando' | 'dati' | 'fatto';
 interface Stato {
   passo: Passo;
   servizioId?: string;
-  operatoreId?: string;
+  /** undefined = non ancora scelto; null = "chiunque sia libero"; string = un operatore preciso. */
+  operatoreId?: string | null;
   giorno?: GiornoPrenotabile;
   slot?: FreeSlot;
   managementToken?: string;
+  nomeCliente?: string;
 }
 
 type Azione =
   | { tipo: 'scegliServizio'; servizioId: string; operatoreUnicoId?: string }
-  | { tipo: 'scegliOperatore'; operatoreId: string }
+  | { tipo: 'scegliOperatore'; operatoreId: string | null }
   | { tipo: 'scegliGiorno'; giorno: GiornoPrenotabile }
   | { tipo: 'scegliSlot'; slot: FreeSlot }
-  | { tipo: 'confermato'; managementToken?: string }
+  | {
+      tipo: 'confermato';
+      managementToken?: string;
+      nomeCliente?: string;
+      /** L'operatore davvero assegnato, se il cliente aveva scelto "chiunque sia libero". */
+      operatoreAssegnatoId?: string;
+    }
   | { tipo: 'indietro' }
   | { tipo: 'slotConteso' };
 
@@ -58,7 +67,15 @@ function riduci(stato: Stato, azione: Azione): Stato {
     case 'scegliSlot':
       return { ...stato, passo: 'dati', slot: azione.slot };
     case 'confermato':
-      return { ...stato, passo: 'fatto', managementToken: azione.managementToken };
+      return {
+        ...stato,
+        passo: 'fatto',
+        managementToken: azione.managementToken,
+        nomeCliente: azione.nomeCliente,
+        // Se era stato scelto "chiunque sia libero", da qui in poi si
+        // ragiona sull'operatore davvero assegnato dal server.
+        operatoreId: azione.operatoreAssegnatoId ?? stato.operatoreId,
+      };
     case 'slotConteso':
       return { ...stato, passo: 'quando', slot: undefined };
     case 'indietro':
@@ -181,7 +198,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
       {stato.passo !== 'servizio' && stato.passo !== 'fatto' && (
         <Riepilogo
           servizio={servizio?.name}
-          operatore={operatore?.name}
+          operatore={stato.operatoreId === null ? 'Chiunque sia libero' : operatore?.name}
           giorno={stato.passo === 'dati' ? stato.giorno?.etichetta : undefined}
           orario={stato.slot?.label}
           onIndietro={() => dispatch({ tipo: 'indietro' })}
@@ -217,6 +234,15 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
 
       {stato.passo === 'operatore' && stato.servizioId && (
         <Sezione titolo="Con chi?">
+          <button
+            onClick={() => dispatch({ tipo: 'scegliOperatore', operatoreId: null })}
+            className="w-full rounded-xl border border-dashed border-sabbia bg-carta/60 px-4 py-3 text-left transition hover:border-terracotta"
+          >
+            <span className="font-medium">Chiunque sia libero</span>
+            <span className="block text-xs font-normal text-inchiostro/50">
+              Vedi tutti gli orari disponibili
+            </span>
+          </button>
           {operatoriPerServizio(stato.servizioId).map((o) => (
             <button
               key={o.id}
@@ -229,11 +255,18 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
         </Sezione>
       )}
 
-      {stato.passo === 'quando' && stato.servizioId && stato.operatoreId && (
+      {stato.passo === 'quando' && stato.servizioId && stato.operatoreId !== undefined && (
         <Sezione titolo="Quando?">
           <StrisciaGiorni
             horizonDays={dati.tenant.horizonDays}
-            weekdayDisponibili={dati.weekdayPerOperatore[stato.operatoreId] ?? []}
+            weekdayDisponibili={
+              stato.operatoreId === null
+                ? weekdayAggregati(
+                    dati.weekdayPerOperatore,
+                    operatoriPerServizio(stato.servizioId).map((o) => o.id),
+                  )
+                : (dati.weekdayPerOperatore[stato.operatoreId] ?? [])
+            }
             selezionato={stato.giorno?.data}
             onScegli={(giorno) => dispatch({ tipo: 'scegliGiorno', giorno })}
           />
@@ -250,7 +283,7 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
         </Sezione>
       )}
 
-      {stato.passo === 'dati' && stato.servizioId && stato.operatoreId && stato.slot && (
+      {stato.passo === 'dati' && stato.servizioId && stato.operatoreId !== undefined && stato.slot && (
         <Sezione titolo="I tuoi dati">
           <FormDati
             salone={dati.tenant.name}
@@ -259,7 +292,9 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             serviceId={stato.servizioId}
             slot={stato.slot}
             precompilato={precompilato}
-            onConfermato={(managementToken) => dispatch({ tipo: 'confermato', managementToken })}
+            onConfermato={(managementToken, nomeCliente, operatoreAssegnatoId) =>
+              dispatch({ tipo: 'confermato', managementToken, nomeCliente, operatoreAssegnatoId })
+            }
             onSlotConteso={() => dispatch({ tipo: 'slotConteso' })}
           />
         </Sezione>
@@ -274,7 +309,9 @@ export function WidgetPrenotazione({ dati }: { dati: DatiSalone }) {
             {servizio.name} · {stato.giorno.etichetta} alle {stato.slot.label}
             {operatore ? ` con ${operatore.name}` : ''}.
           </p>
-          <p className="mt-1 text-sm text-crema/60">Ti aspettiamo.</p>
+          <p className="mt-1 text-sm text-crema/60">
+            Ti aspettiamo{stato.nomeCliente ? `, ${stato.nomeCliente}` : ''}.
+          </p>
           <AggiungiAlCalendario
             titolo={`${servizio.name} · ${dati.tenant.name}`}
             descrizione={
@@ -343,32 +380,88 @@ export function StrisciaGiorni(props: {
       weekdayDisponibili: props.weekdayDisponibili,
     }),
   );
+
+  // Col mouse lo swipe non è scontato quanto col dito: le freccette
+  // (solo da desktop, md:) danno un modo esplicito di scorrere. Compaiono
+  // solo quando c'è davvero altro da vedere in quella direzione.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [puoIndietro, setPuoIndietro] = useState(false);
+  const [puoAvanti, setPuoAvanti] = useState(false);
+
+  const aggiornaFrecce = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setPuoIndietro(el.scrollLeft > 0);
+    setPuoAvanti(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    aggiornaFrecce();
+    window.addEventListener('resize', aggiornaFrecce);
+    return () => window.removeEventListener('resize', aggiornaFrecce);
+  }, [aggiornaFrecce]);
+
+  function scorri(verso: 1 | -1) {
+    scrollRef.current?.scrollBy({ left: verso * scrollRef.current.clientWidth * 0.8, behavior: 'smooth' });
+  }
+
   if (props.weekdayDisponibili.length === 0) {
     return <p className="text-sm text-inchiostro/60">Nessun orario disponibile online per ora.</p>;
   }
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2">
-      {giorni.map((g) => (
+    <div className="relative">
+      {puoIndietro && (
         <button
-          key={g.data}
-          disabled={!g.disponibile}
-          onClick={() => props.onScegli(g)}
-          className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
-            props.selezionato === g.data
-              ? 'border-terracotta bg-terracotta font-medium text-crema'
-              : 'border-sabbia bg-carta/60 hover:border-terracotta'
-          }`}
+          type="button"
+          onClick={() => scorri(-1)}
+          aria-label="Giorni precedenti"
+          className="absolute inset-y-0 left-0 z-10 hidden w-10 items-center justify-start bg-gradient-to-r from-crema via-crema/80 to-transparent pb-2 md:flex"
         >
-          {g.etichetta}
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sabbia bg-carta text-sm text-inchiostro/70 transition hover:border-terracotta hover:text-terracotta">
+            ←
+          </span>
         </button>
-      ))}
+      )}
+      <div
+        ref={scrollRef}
+        onScroll={aggiornaFrecce}
+        className="scroll-nascosta flex gap-2 overflow-x-auto pb-2"
+      >
+        {giorni.map((g) => (
+          <button
+            key={g.data}
+            disabled={!g.disponibile}
+            onClick={() => props.onScegli(g)}
+            className={`shrink-0 rounded-xl border px-3 py-2 text-sm capitalize transition disabled:opacity-30 ${
+              props.selezionato === g.data
+                ? 'border-terracotta bg-terracotta font-medium text-crema'
+                : 'border-sabbia bg-carta/60 hover:border-terracotta'
+            }`}
+          >
+            {g.etichetta}
+          </button>
+        ))}
+      </div>
+      {puoAvanti && (
+        <button
+          type="button"
+          onClick={() => scorri(1)}
+          aria-label="Giorni successivi"
+          className="absolute inset-y-0 right-0 z-10 hidden w-10 items-center justify-end bg-gradient-to-l from-crema via-crema/80 to-transparent pb-2 md:flex"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-sabbia bg-carta text-sm text-inchiostro/70 transition hover:border-terracotta hover:text-terracotta">
+            →
+          </span>
+        </button>
+      )}
     </div>
   );
 }
 
 export function SceltaOrario(props: {
   tenantSlug: string;
-  operatorId: string;
+  /** null = "chiunque sia libero": /api/slots aggrega tutti gli operatori idonei. */
+  operatorId: string | null;
   serviceId: string;
   data: string;
   /** Orari (ISO) che il salone ha proposto: evidenziati nella griglia. */
@@ -384,10 +477,10 @@ export function SceltaOrario(props: {
     setErrore(false);
     const qs = new URLSearchParams({
       tenantSlug: props.tenantSlug,
-      operatorId: props.operatorId,
       serviceId: props.serviceId,
       date: props.data,
     });
+    if (props.operatorId) qs.set('operatorId', props.operatorId);
     fetch(`/api/slots?${qs}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((json) => attivo && setSlots(json.slots))
@@ -426,7 +519,7 @@ export function SceltaOrario(props: {
                 }`}
               >
                 {consigliato && (
-                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-terracotta px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-crema">
+                  <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-terracotta px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-crema">
                     Consigliato
                   </span>
                 )}
@@ -472,11 +565,12 @@ const PREFISSI = [
 function FormDati(props: {
   salone: string;
   tenantSlug: string;
-  operatorId: string;
+  /** null = "chiunque sia libero": lo decide create_booking. */
+  operatorId: string | null;
   serviceId: string;
   slot: FreeSlot;
   precompilato?: DatiPrecompilati;
-  onConfermato: (managementToken?: string) => void;
+  onConfermato: (managementToken?: string, nomeCliente?: string, operatoreAssegnatoId?: string) => void;
   onSlotConteso: () => void;
 }) {
   const [invio, setInvio] = useState(false);
@@ -485,6 +579,7 @@ function FormDati(props: {
   async function invia(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const nome = String(form.get('nome') ?? '').trim();
     setInvio(true);
     setErrore(null);
     try {
@@ -506,7 +601,7 @@ function FormDati(props: {
       });
       if (res.ok) {
         const json = await res.json().catch(() => ({}));
-        props.onConfermato(json.managementToken);
+        props.onConfermato(json.managementToken, nome || undefined, json.operatorId || undefined);
         return;
       }
       const json = await res.json().catch(() => ({}));

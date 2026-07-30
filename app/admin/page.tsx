@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { DateTime } from 'luxon';
 import { getSupabaseBrowserClient } from '@/lib/supabase/browser';
-import { Intestazione, useSalone } from './comuni';
+import { ConfermaAzione, ErroreTemporaneo, Intestazione, useErroreTemporaneo, useSalone } from './comuni';
 import { NuovaPrenotazione } from './nuova-prenotazione';
 import { ProponiAlternative } from './proponi-alternative';
 import { GrigliaAgenda, type Chiusura, type Operatore, type Prenotazione } from './griglia-agenda';
@@ -25,6 +25,11 @@ export default function AgendaAdmin() {
   const [errore, setErrore] = useState<string | null>(null);
   const [nuova, setNuova] = useState(false);
   const [proposta, setProposta] = useState<Prenotazione | null>(null);
+  const [confermaAzione, setConfermaAzione] = useState<{
+    p: Prenotazione;
+    stato: 'no_show' | 'cancelled';
+  } | null>(null);
+  const [erroreAzione, setErroreAzione] = useErroreTemporaneo();
 
   useEffect(() => {
     if (!salone) return;
@@ -76,22 +81,33 @@ export default function AgendaAdmin() {
     carica();
   }, [carica]);
 
-  async function cambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
-    if (stato !== 'completed') {
-      const domanda =
-        stato === 'cancelled'
-          ? 'Annullare questa prenotazione?'
-          : 'Segnare il cliente come no-show?';
-      if (!window.confirm(domanda)) return;
-    }
-    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', p.id);
-    if (error) {
-      setErrore('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
+  function cambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
+    if (stato === 'completed') {
+      eseguiCambiaStato(p, stato);
       return;
     }
-    // Dopo un annullamento: proponi al cliente gli orari alternativi.
+    setConfermaAzione({ p, stato });
+  }
+
+  async function eseguiCambiaStato(p: Prenotazione, stato: 'completed' | 'no_show' | 'cancelled') {
+    const precedente = p.status;
+    // Ottimistico: la griglia cambia subito, prima che il server risponda.
+    // Se il server rifiuta, si torna allo stato precedente e lo si segnala
+    // con un banner temporaneo, senza sostituire tutta la pagina.
+    setPrenotazioni((prev) =>
+      prev ? prev.map((r) => (r.id === p.id ? { ...r, status: stato } : r)) : prev,
+    );
+    // Dopo un annullamento: proponi subito al cliente gli orari alternativi.
     if (stato === 'cancelled' && p.customers) setProposta(p);
-    carica();
+
+    const { error } = await supabase.from('bookings').update({ status: stato }).eq('id', p.id);
+    if (error) {
+      setPrenotazioni((prev) =>
+        prev ? prev.map((r) => (r.id === p.id ? { ...r, status: precedente } : r)) : prev,
+      );
+      if (stato === 'cancelled') setProposta(null);
+      setErroreAzione('Non sono riuscito ad aggiornare la prenotazione. Riprova.');
+    }
   }
 
   if (erroreAccesso || errore) {
@@ -112,11 +128,38 @@ export default function AgendaAdmin() {
   const passo = vista === 'settimana' ? { weeks: 1 } : { days: 1 };
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-8">
-      <Intestazione salone={salone} ruolo={ruolo} />
+    <main className="mx-auto flex h-dvh w-full max-w-5xl flex-col px-4 py-8">
+      <div className="shrink-0">
+        <Intestazione salone={salone} ruolo={ruolo} />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-sabbia px-4 py-2">
-        <div className="flex items-center gap-3">
+        {/* La modalità (Giorno/Settimana) governa cosa significano le
+            frecce e l'etichetta sotto — è la decisione "esterna", quindi
+            precede la riga che dipende da essa invece di condividerne la
+            riga: erano due decisioni diverse stipate nello stesso
+            controllo. Anche il contenitore pieno (bg-sabbia, altrove
+            riservato ad avvisi e riepiloghi) dava a questa barra di
+            navigazione lo stesso peso di un contenuto importante, quando
+            è solo orientamento. */}
+        <div className="mb-3 flex w-fit overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
+          <button
+            onClick={() => setVista('giorno')}
+            className={`px-3 py-1 font-medium transition ${
+              vista === 'giorno' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+            }`}
+          >
+            Giorno
+          </button>
+          <button
+            onClick={() => setVista('settimana')}
+            className={`px-3 py-1 font-medium transition ${
+              vista === 'settimana' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
+            }`}
+          >
+            Settimana
+          </button>
+        </div>
+
+        <div className="mb-6 flex flex-wrap items-center gap-3 border-b border-sabbia pb-4 text-sm">
           <button
             onClick={() => setData(giorno.minus(passo).toISODate()!)}
             className="font-medium text-terracotta"
@@ -152,47 +195,52 @@ export default function AgendaAdmin() {
             →
           </button>
         </div>
-        <div className="flex overflow-hidden rounded-lg border border-inchiostro/15 text-sm">
-          <button
-            onClick={() => setVista('giorno')}
-            className={`px-3 py-1 font-medium transition ${
-              vista === 'giorno' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
-            }`}
-          >
-            Giorno
-          </button>
-          <button
-            onClick={() => setVista('settimana')}
-            className={`px-3 py-1 font-medium transition ${
-              vista === 'settimana' ? 'bg-inchiostro text-crema' : 'hover:bg-carta/60'
-            }`}
-          >
-            Settimana
-          </button>
-        </div>
+
+        <button
+          onClick={() => setNuova(true)}
+          className="mb-6 flex w-full items-center justify-center gap-2 rounded-xl bg-terracotta py-4 text-lg font-semibold text-crema shadow-md shadow-terracotta/30 transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-terracotta/40 active:translate-y-0"
+        >
+          <span aria-hidden="true" className="text-2xl leading-none">+</span>
+          Nuova prenotazione
+        </button>
       </div>
 
-      <button
-        onClick={() => setNuova(true)}
-        className="mb-6 w-full rounded-xl bg-terracotta py-3 font-semibold text-crema transition hover:opacity-90"
-      >
-        + Nuova prenotazione
-      </button>
+      {/* Unico riquadro a occupare lo spazio verticale rimasto: solo qui
+          scorre, non nella pagina. L'altezza dell'intestazione sopra può
+          cambiare (è già successo) senza bisogno di ricalcolare nulla. */}
+      <div className="min-h-0 flex-1">
+        {prenotazioni === null ? (
+          <p className="text-center text-inchiostro/60">Un attimo…</p>
+        ) : (
+          <GrigliaAgenda
+            salone={salone}
+            vista={vista}
+            giornoISO={data}
+            inizioSettimanaISO={inizioSettimana.toISODate()!}
+            oggiISO={oggi}
+            operatori={operatori}
+            prenotazioni={prenotazioni}
+            chiusure={chiusure}
+            onCambiaStato={cambiaStato}
+            onBloccato={carica}
+          />
+        )}
+      </div>
 
-      {prenotazioni === null ? (
-        <p className="text-center text-inchiostro/60">Un attimo…</p>
-      ) : (
-        <GrigliaAgenda
-          salone={salone}
-          vista={vista}
-          giornoISO={data}
-          inizioSettimanaISO={inizioSettimana.toISODate()!}
-          oggiISO={oggi}
-          operatori={operatori}
-          prenotazioni={prenotazioni}
-          chiusure={chiusure}
-          onCambiaStato={cambiaStato}
-          onBloccato={carica}
+      {confermaAzione && (
+        <ConfermaAzione
+          titolo={confermaAzione.stato === 'cancelled' ? 'Annullare la prenotazione?' : 'Segnare il no-show?'}
+          messaggio={
+            confermaAzione.stato === 'cancelled'
+              ? 'Il cliente verrà avvisato e potrai proporgli subito un orario alternativo.'
+              : 'Il cliente risulterà non presentato per questo appuntamento.'
+          }
+          testoConferma={confermaAzione.stato === 'cancelled' ? 'Sì, annulla' : 'Sì, segna no-show'}
+          onAnnulla={() => setConfermaAzione(null)}
+          onConferma={() => {
+            eseguiCambiaStato(confermaAzione.p, confermaAzione.stato);
+            setConfermaAzione(null);
+          }}
         />
       )}
 
@@ -223,6 +271,8 @@ export default function AgendaAdmin() {
           }}
         />
       )}
+
+      <ErroreTemporaneo messaggio={erroreAzione} />
     </main>
   );
 }

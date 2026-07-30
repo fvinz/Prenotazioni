@@ -59,12 +59,12 @@ export default async function PaginaSalone({
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-lg px-4 py-8">
-      <header className="mb-8 text-center">
-        <p className="font-display text-2xl">
+      <header className="mb-10 text-center">
+        <p className="font-display text-lg text-inchiostro/50">
           puntuale<span className="text-terracotta">.</span>
         </p>
-        <h1 className="mt-4 font-display text-4xl tracking-tight">{tenant.name}</h1>
-        <p className="mt-1 text-sm text-inchiostro/60">Prenota il tuo appuntamento.</p>
+        <h1 className="mt-3 font-display text-5xl tracking-tight">{tenant.name}</h1>
+        <p className="mt-2 text-sm text-inchiostro/60">Prenota il tuo appuntamento.</p>
       </header>
       <Suspense fallback={<p className="text-center text-inchiostro/60">Un attimo…</p>}>
         <WidgetPrenotazione dati={dati} />
