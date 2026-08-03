@@ -686,7 +686,16 @@ function FormDati(props: {
       </button>
       <p className="text-xs text-inchiostro/50">
         Inviando, i tuoi dati saranno trattati da {props.salone} solo per gestire
-        l’appuntamento.
+        l’appuntamento. Leggi l’
+        <a
+          href={`/${props.tenantSlug}/privacy`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline transition hover:text-terracotta"
+        >
+          informativa privacy
+        </a>
+        .
       </p>
     </form>
   );
